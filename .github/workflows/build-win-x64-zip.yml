@@ -35,7 +35,9 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          npx node-gyp install
+          yarn install --frozen-lockfile
 
       - name: Build Windows x64 ZIP
         run: yarn build:win:x64
