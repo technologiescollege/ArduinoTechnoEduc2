@@ -23,6 +23,7 @@ import {
 import type { TheiaBrowserWindowOptions } from '@theia/core/lib/electron-main/theia-electron-window';
 import { inject, injectable } from '@theia/core/shared/inversify';
 import { URI } from '@theia/core/shared/vscode-uri';
+import { WebContents } from '@theia/electron/shared/electron';
 import { log as logToFile, setup as setupFileLog } from 'node-log-rotate';
 import { fork } from 'node:child_process';
 import {
@@ -496,6 +497,53 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
       return pathToFileURL(fileURLToPath(url)).href;
     } catch {
       return url;
+    }
+  }
+
+  /**
+   * Reads generated Arduino code from the Blockly@rduino window (`#pre_previewArduino`),
+   * including same-origin iframes.
+   */
+  async getBlocklyPreviewArduinoText(sender: WebContents): Promise<string> {
+    const hostWindow = BrowserWindow.fromWebContents(sender);
+    if (!hostWindow) {
+      return '';
+    }
+    const plotter = this.plotterWindows.get(hostWindow.id);
+    if (!plotter || plotter.isDestroyed()) {
+      return '';
+    }
+    const wc = plotter.webContents;
+    if (wc.isDestroyed()) {
+      return '';
+    }
+    const script = `(function () {
+  function textFrom(el) {
+    if (!el) return '';
+    return (typeof el.innerText === 'string' ? el.innerText : el.textContent) || '';
+  }
+  function findInDoc(doc) {
+    if (!doc) return null;
+    var el = doc.getElementById('pre_previewArduino');
+    if (el) return el;
+    var frames = doc.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        var fd = frames[i].contentDocument;
+        el = findInDoc(fd);
+        if (el) return el;
+      } catch (e) {}
+    }
+    return null;
+  }
+  return textFrom(findInDoc(document));
+})()`;
+    try {
+      const result = await wc.executeJavaScript(script, true);
+      return typeof result === 'string' ? result : '';
+    } catch (err) {
+      console.warn('getBlocklyPreviewArduinoText:', err);
+      return '';
     }
   }
 

@@ -23,6 +23,7 @@ import {
   CHANNEL_SHOW_MESSAGE_BOX,
   CHANNEL_SHOW_OPEN_DIALOG,
   CHANNEL_SHOW_PLOTTER_WINDOW,
+  CHANNEL_GET_BLOCKLY_PREVIEW,
   CHANNEL_SHOW_SAVE_DIALOG,
   ElectronArduino,
   InternalMenuDto,
@@ -104,6 +105,8 @@ const api: ElectronArduino = {
     ipcRenderer.send(CHANNEL_SET_REPRESENTED_FILENAME, fsPath),
   showPlotterWindow: (params: { url: string; forceReload?: boolean }) =>
     ipcRenderer.send(CHANNEL_SHOW_PLOTTER_WINDOW, params),
+  getBlocklyPreviewArduino: () =>
+    ipcRenderer.invoke(CHANNEL_GET_BLOCKLY_PREVIEW) as Promise<string>,
   registerPlotterWindowCloseHandler: (handler: () => void) => {
     const listener = () => handler();
     ipcRenderer.on(CHANNEL_PLOTTER_WINDOW_DID_CLOSE, listener);

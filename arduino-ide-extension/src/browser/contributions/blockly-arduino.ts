@@ -1,8 +1,13 @@
 import { nls } from '@theia/core/lib/common';
+import URI from '@theia/core/lib/common/uri';
 import type { ProgressUpdate } from '@theia/core/lib/common/message-service-protocol';
 import { FrontendApplication } from '@theia/core/lib/browser/frontend-application';
+import { EditorManager } from '@theia/editor/lib/browser/editor-manager';
 import { MaybePromise } from '@theia/core/lib/common/types';
+import { MonacoEditor } from '@theia/monaco/lib/browser/monaco-editor';
+import * as monaco from '@theia/monaco-editor-core';
 import { inject, injectable } from '@theia/core/shared/inversify';
+import { Sketch } from '../../common/protocol/sketches-service';
 import {
   BlocklyArduinoProgress,
   BlocklyArduinoService,
@@ -12,6 +17,10 @@ import {
 } from '../../common/protocol/blockly-arduino-service';
 import { ExecuteWithProgress } from '../../common/protocol/progressible';
 import { ArduinoMenus } from '../menu/arduino-menus';
+import {
+  CurrentSketch,
+  SketchesServiceClientImpl,
+} from '../sketches-service-client-impl';
 import {
   Command,
   CommandRegistry,
@@ -52,6 +61,12 @@ export class BlocklyArduino
 {
   @inject(BlocklyArduinoService)
   protected readonly blocklyArduinoService: BlocklyArduinoService;
+
+  @inject(EditorManager)
+  protected readonly editorManager: EditorManager;
+
+  @inject(SketchesServiceClientImpl)
+  protected readonly sketchServiceClient: SketchesServiceClientImpl;
 
   private blocklyProgress?: {
     progressId: string;
@@ -186,6 +201,79 @@ export class BlocklyArduino
         });
       },
     });
+    registry.registerCommand(BlocklyArduino.Commands.PASTE_PREVIEW_INTO_SKETCH, {
+      execute: async () => {
+        if (!window.electronArduino?.getBlocklyPreviewArduino) {
+          this.messageService.error(
+            nls.localize(
+              'arduino/blocklyArduino/electronOnly',
+              'This action is only available in the Electron application.'
+            )
+          );
+          return;
+        }
+        const raw = await window.electronArduino.getBlocklyPreviewArduino();
+        const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd();
+        if (!text.trim()) {
+          this.messageService.warn(
+            nls.localize(
+              'arduino/blocklyArduino/previewEmpty',
+              'No code found in Blockly@rduino preview (#pre_previewArduino). Open Blockly and generate code first.'
+            )
+          );
+          return;
+        }
+        const sketch = await this.sketchServiceClient.currentSketch();
+        if (!CurrentSketch.isValid(sketch)) {
+          this.messageService.warn(
+            nls.localize(
+              'arduino/blocklyArduino/noSketchForPaste',
+              'Open a sketch first, then paste the Blockly preview into the editor.'
+            )
+          );
+          return;
+        }
+        let codeEditor: monaco.editor.IStandaloneCodeEditor | undefined;
+        const editor = this.editorManager.currentEditor?.editor;
+        if (editor instanceof MonacoEditor) {
+          if (Sketch.isInSketch(editor.uri, sketch)) {
+            codeEditor = editor.getControl();
+          }
+        }
+        if (!codeEditor) {
+          const widget = await this.editorManager.open(new URI(sketch.mainFileUri));
+          if (widget.editor instanceof MonacoEditor) {
+            codeEditor = widget.editor.getControl();
+          }
+        }
+        if (!codeEditor) {
+          this.messageService.warn(
+            nls.localize(
+              'arduino/blocklyArduino/noEditorForPaste',
+              'Could not open the sketch editor.'
+            )
+          );
+          return;
+        }
+        const model = codeEditor.getModel();
+        const selection = codeEditor.getSelection();
+        if (!model || !selection) {
+          return;
+        }
+        model.pushStackElement();
+        codeEditor.executeEdits('blockly-preview', [
+          { range: selection, text, forceMoveMarkers: true },
+        ]);
+        model.pushStackElement();
+        codeEditor.focus();
+        this.messageService.info(
+          nls.localize(
+            'arduino/blocklyArduino/previewPasted',
+            'Blockly preview code was inserted into the editor.'
+          )
+        );
+      },
+    });
     registry.registerCommand(BlocklyArduino.Commands.SHOW_PORTABLE_STATUS, {
       execute: async () => {
         const status = await this.blocklyArduinoService.getPortableModeStatus();
@@ -202,7 +290,7 @@ export class BlocklyArduino
         this.messageService.info(
           nls.localize(
             'arduino/blocklyArduino/portableDisabled',
-            "Portable mode disabled. Create a 'portable' folder next to the executable to enable it."
+            'No portable root detected (unusual). Check ARDUINO_IDE_PORTABLE_ROOT.'
           )
         );
       },
@@ -232,6 +320,14 @@ export class BlocklyArduino
         'Open Blockly@rduino'
       ),
       order: '1',
+    });
+    registry.registerMenuAction(ArduinoMenus.TOOLS__BLOCKLY_MAIN_GROUP, {
+      commandId: BlocklyArduino.Commands.PASTE_PREVIEW_INTO_SKETCH.id,
+      label: nls.localize(
+        'arduino/blocklyArduino/pastePreviewIntoSketch',
+        'Insert Blockly preview into editor'
+      ),
+      order: '2',
     });
     registry.registerMenuAction(ArduinoMenus.HELP__MAIN_GROUP, {
       commandId: BlocklyArduino.Commands.SHOW_PORTABLE_STATUS.id,
@@ -313,6 +409,9 @@ export namespace BlocklyArduino {
     };
     export const OPEN_LOCAL: Command = {
       id: 'arduino-blockly-arduino-open-local',
+    };
+    export const PASTE_PREVIEW_INTO_SKETCH: Command = {
+      id: 'arduino-blockly-arduino-paste-preview',
     };
     export const SHOW_PORTABLE_STATUS: Command = {
       id: 'arduino-blockly-arduino-show-portable-status',
