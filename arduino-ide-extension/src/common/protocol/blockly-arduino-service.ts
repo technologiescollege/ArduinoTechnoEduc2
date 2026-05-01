@@ -1,5 +1,24 @@
+import type { JsonRpcServer } from '@theia/core/lib/common/messaging/proxy-factory';
+
 export const BlocklyArduinoServicePath = '/services/blockly-arduino-service';
 export const BlocklyArduinoService = Symbol('BlocklyArduinoService');
+
+export type BlocklyArduinoProgressPhase =
+  | 'preparing'
+  | 'downloading'
+  | 'extracting'
+  | 'installing';
+
+export interface BlocklyArduinoProgress {
+  readonly progressId: string;
+  readonly phase: BlocklyArduinoProgressPhase;
+  readonly downloadDone?: number;
+  readonly downloadTotal?: number;
+}
+
+export interface BlocklyArduinoServiceClient {
+  notifyBlocklyProgress(progress: BlocklyArduinoProgress): void;
+}
 
 export interface BlocklyArduinoUpdateResult {
   localVersion?: string;
@@ -22,9 +41,10 @@ export interface PortableModeStatus {
   rootPath?: string;
 }
 
-export interface BlocklyArduinoService {
+export interface BlocklyArduinoService
+  extends JsonRpcServer<BlocklyArduinoServiceClient> {
   checkForUpdate(): Promise<BlocklyArduinoUpdateCheck>;
-  updateIfNeeded(): Promise<BlocklyArduinoUpdateResult>;
+  updateIfNeeded(progressId: string): Promise<BlocklyArduinoUpdateResult>;
   getLocalIndexPath(): Promise<string | undefined>;
   getPortableModeStatus(): Promise<PortableModeStatus>;
 }

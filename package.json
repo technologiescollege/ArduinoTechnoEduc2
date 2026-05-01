@@ -66,7 +66,9 @@
     "i18n:pull": "node ./scripts/i18n/transifex-pull.js ./i18n/",
     "themes:pull": "node ./scripts/themes/theme-tokens-pull.js",
     "themes:generate": "node ./scripts/themes/theme-generator.js",
-    "compose-changelog": "yarn --cwd ./arduino-ide-extension compose-changelog"
+    "compose-changelog": "yarn --cwd ./arduino-ide-extension compose-changelog",
+    "sync:upstream": "bash scripts/sync-upstream.sh",
+    "export:fork-patch": "bash scripts/export-fork-patch.sh"
   },
   "lint-staged": {
     "./arduino-ide-extension/**/*.{ts,tsx}": [

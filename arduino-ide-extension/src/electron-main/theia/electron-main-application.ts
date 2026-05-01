@@ -26,15 +26,15 @@ import { URI } from '@theia/core/shared/vscode-uri';
 import { log as logToFile, setup as setupFileLog } from 'node-log-rotate';
 import { fork } from 'node:child_process';
 import {
-  existsSync,
+  mkdirSync,
   promises as fs,
   readFileSync,
   rm,
   rmSync,
-  statSync,
 } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Argv } from 'yargs';
 import { Sketch } from '../../common/protocol';
 import { poolWhile } from '../../common/utils';
@@ -486,6 +486,19 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
 
   // keys are the host window IDs
   private readonly plotterWindows = new Map<number, BrowserWindow>();
+
+  /** Normalizes `file:` URLs so Electron on Windows can load them (avoids malformed `%3A` / `%5C` paths). */
+  private plotterUrlForLoad(url: string): string {
+    if (!url.startsWith('file:')) {
+      return url;
+    }
+    try {
+      return pathToFileURL(fileURLToPath(url)).href;
+    } catch {
+      return url;
+    }
+  }
+
   private handleShowPlotterWindow(
     event: Electron.IpcMainEvent,
     args: unknown
@@ -514,7 +527,7 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
       if (!args.forceReload) {
         plotterWindow.focus();
       } else {
-        plotterWindow.loadURL(args.url);
+        plotterWindow.loadURL(this.plotterUrlForLoad(args.url));
       }
       return;
     }
@@ -538,7 +551,7 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
       this.plotterWindows.delete(windowId);
       electronWindow.webContents.send(CHANNEL_PLOTTER_WINDOW_DID_CLOSE);
     });
-    plotterWindow.loadURL(args.url);
+    plotterWindow.loadURL(this.plotterUrlForLoad(args.url));
   }
 
   protected override async onSecondInstance(
@@ -654,34 +667,33 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
 
   private configurePortableMode(): void {
     const portableRoot = this.resolvePortableRoot();
-    if (portableRoot) {
-      process.env[PORTABLE_ROOT_ENV] = portableRoot;
-      console.info(`Portable mode enabled. Root: ${portableRoot}`);
-    } else {
-      delete process.env[PORTABLE_ROOT_ENV];
-    }
+    process.env[PORTABLE_ROOT_ENV] = portableRoot;
+    console.info(`Portable mode (default). Root: ${portableRoot}`);
   }
 
-  private resolvePortableRoot(): string | undefined {
+  /**
+   * Portable layout is always on: toolchains, libraries (Arduino15) and sketchbook
+   * live under `portable/` (see {@link ConfigServiceImpl.applyPortableMode}).
+   * - Packaged: `{dirname(exe)}/portable` (created if missing)
+   * - Dev: `{cwd}/portable` (typically `electron-app/portable` when using `yarn --cwd electron-app start`)
+   * Override: set `ARDUINO_IDE_PORTABLE_ROOT` before launch.
+   */
+  private resolvePortableRoot(): string {
     const envRoot = process.env[PORTABLE_ROOT_ENV]?.trim();
     if (envRoot) {
+      mkdirSync(envRoot, { recursive: true });
       return envRoot;
     }
 
-    const executablePortableDir = join(dirname(app.getPath('exe')), 'portable');
-    if (
-      existsSync(executablePortableDir) &&
-      statSync(executablePortableDir).isDirectory()
-    ) {
-      return executablePortableDir;
+    if (isProductionMode) {
+      const dir = join(dirname(app.getPath('exe')), 'portable');
+      mkdirSync(dir, { recursive: true });
+      return dir;
     }
 
-    const cwdPortableDir = join(resolve(process.cwd()), 'portable');
-    if (existsSync(cwdPortableDir) && statSync(cwdPortableDir).isDirectory()) {
-      return cwdPortableDir;
-    }
-
-    return undefined;
+    const dir = join(resolve(process.cwd()), 'portable');
+    mkdirSync(dir, { recursive: true });
+    return dir;
   }
 
   private closedWorkspaces: WorkspaceOptions[] = [];

@@ -65,6 +65,7 @@ import {
 import { ExecutableServiceImpl } from './executable-service-impl';
 import {
   BlocklyArduinoService,
+  BlocklyArduinoServiceClient,
   BlocklyArduinoServicePath,
 } from '../common/protocol/blockly-arduino-service';
 import { BlocklyArduinoServiceImpl } from './blockly-arduino-service-impl';
@@ -198,8 +199,16 @@ export default new ContainerModule((bind, unbind, isBound, rebind) => {
   bind(ConnectionHandler)
     .toDynamicValue(
       (context) =>
-        new JsonRpcConnectionHandler(BlocklyArduinoServicePath, () =>
-          context.container.get(BlocklyArduinoService)
+        new JsonRpcConnectionHandler<BlocklyArduinoServiceClient>(
+          BlocklyArduinoServicePath,
+          (client) => {
+            const server = context.container.get<BlocklyArduinoServiceImpl>(
+              BlocklyArduinoServiceImpl
+            );
+            server.setClient(client);
+            client.onDidCloseConnection(() => server.setClient(undefined));
+            return server;
+          }
         )
     )
     .inSingletonScope();

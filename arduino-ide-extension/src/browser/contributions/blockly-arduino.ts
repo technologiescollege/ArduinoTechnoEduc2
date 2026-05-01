@@ -1,11 +1,16 @@
 import { nls } from '@theia/core/lib/common';
-import { FileUri } from '@theia/core/lib/common/file-uri';
+import type { ProgressUpdate } from '@theia/core/lib/common/message-service-protocol';
+import { FrontendApplication } from '@theia/core/lib/browser/frontend-application';
+import { MaybePromise } from '@theia/core/lib/common/types';
 import { inject, injectable } from '@theia/core/shared/inversify';
 import {
+  BlocklyArduinoProgress,
   BlocklyArduinoService,
+  BlocklyArduinoServiceClient,
   BlocklyArduinoUpdateCheck,
   BlocklyArduinoUpdateResult,
 } from '../../common/protocol/blockly-arduino-service';
+import { ExecuteWithProgress } from '../../common/protocol/progressible';
 import { ArduinoMenus } from '../menu/arduino-menus';
 import {
   Command,
@@ -14,10 +19,101 @@ import {
   MenuModelRegistry,
 } from './contribution';
 
+/**
+ * Builds a `file://` URL that Electron/Chromium accepts on Windows.
+ * Theia's file URI string can become `file:///d%3A%5C...`, which `loadURL` rejects (ERR_FAILED).
+ */
+function blocklyLocalPathToFileUrl(fsPath: string): string {
+  const normalized = fsPath.replace(/\\/g, '/');
+  const win = /^([a-zA-Z]):(\/.*)?$/.exec(normalized);
+  if (win) {
+    const drive = win[1];
+    const rest = win[2] ?? '/';
+    const segments = rest
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment));
+    return `file:///${drive}:/${segments.join('/')}`;
+  }
+  if (normalized.startsWith('/')) {
+    const segments = normalized
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment));
+    return `file:///${segments.join('/')}`;
+  }
+  throw new Error(`Unsupported absolute path for file URL: ${fsPath}`);
+}
+
 @injectable()
-export class BlocklyArduino extends Contribution {
+export class BlocklyArduino
+  extends Contribution
+  implements BlocklyArduinoServiceClient
+{
   @inject(BlocklyArduinoService)
   protected readonly blocklyArduinoService: BlocklyArduinoService;
+
+  private blocklyProgress?: {
+    progressId: string;
+    report: (update: ProgressUpdate) => void;
+  };
+
+  override onStart(_app: FrontendApplication): MaybePromise<void> {
+    this.blocklyArduinoService.setClient(this);
+  }
+
+  notifyBlocklyProgress(progress: BlocklyArduinoProgress): void {
+    if (this.blocklyProgress?.progressId !== progress.progressId) {
+      return;
+    }
+    const { phase, downloadDone = 0, downloadTotal = 0 } = progress;
+    let message = '';
+    let work: ProgressUpdate['work'] | undefined;
+    switch (phase) {
+      case 'preparing':
+        message = nls.localize(
+          'arduino/blocklyArduino/progressPreparing',
+          'Preparing update…'
+        );
+        work = { done: 3, total: 100 };
+        break;
+      case 'downloading':
+        if (downloadTotal > 0) {
+          const ratio = Math.min(1, downloadDone / downloadTotal);
+          const percent = Math.round(ratio * 100);
+          message = nls.localize(
+            'arduino/blocklyArduino/progressDownloading',
+            'Downloading Blockly@rduino… {0}%',
+            String(percent)
+          );
+          work = { done: 5 + Math.round(ratio * 60), total: 100 };
+        } else {
+          message = nls.localize(
+            'arduino/blocklyArduino/progressDownloadingUnknown',
+            'Downloading Blockly@rduino…'
+          );
+          work = { done: Number.NaN, total: Number.NaN };
+        }
+        break;
+      case 'extracting':
+        message = nls.localize(
+          'arduino/blocklyArduino/progressExtracting',
+          'Extracting archive…'
+        );
+        work = { done: 72, total: 100 };
+        break;
+      case 'installing':
+        message = nls.localize(
+          'arduino/blocklyArduino/progressInstalling',
+          'Installing files…'
+        );
+        work = { done: 88, total: 100 };
+        break;
+      default:
+        break;
+    }
+    this.blocklyProgress.report({ message, work });
+  }
 
   override registerCommands(registry: CommandRegistry): void {
     registry.registerCommand(BlocklyArduino.Commands.UPDATE, {
@@ -28,8 +124,28 @@ export class BlocklyArduino extends Contribution {
           if (!shouldProceed) {
             return;
           }
-          const result = await this.blocklyArduinoService.updateIfNeeded();
-          this.showUpdateResult(result);
+          const progressTitle = nls.localize(
+            'arduino/blocklyArduino/progressTitle',
+            'Updating Blockly@rduino…'
+          );
+          await ExecuteWithProgress.withProgress(
+            progressTitle,
+            this.messageService,
+            async (progress) => {
+              this.blocklyProgress = {
+                progressId: progress.id,
+                report: progress.report.bind(progress),
+              };
+              try {
+                const result = await this.blocklyArduinoService.updateIfNeeded(
+                  progress.id
+                );
+                this.showUpdateResult(result);
+              } finally {
+                this.blocklyProgress = undefined;
+              }
+            }
+          );
         } catch (error) {
           const reason = error instanceof Error ? error.message : 'Unknown error.';
           this.messageService.error(
@@ -54,7 +170,7 @@ export class BlocklyArduino extends Contribution {
           );
           return;
         }
-        const indexUrl = FileUri.create(indexPath).toString();
+        const indexUrl = blocklyLocalPathToFileUrl(indexPath);
         if (!window.electronArduino) {
           this.messageService.error(
             nls.localize(

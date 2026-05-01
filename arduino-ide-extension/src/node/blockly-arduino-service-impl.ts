@@ -2,13 +2,17 @@ import * as fs from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { Disposable } from '@theia/core/lib/common/disposable';
 import { injectable } from '@theia/core/shared/inversify';
 import extract from 'extract-zip';
 import fetch from 'node-fetch';
 import semver from 'semver';
 import {
+  BlocklyArduinoProgressPhase,
   BlocklyArduinoService,
+  BlocklyArduinoServiceClient,
   BlocklyArduinoUpdateCheck,
   BlocklyArduinoUpdateResult,
   PortableModeStatus,
@@ -22,7 +26,35 @@ const LOCAL_FOLDER_NAME = 'Blockly@rduino';
 const PORTABLE_ROOT_ENV = 'ARDUINO_IDE_PORTABLE_ROOT';
 
 @injectable()
-export class BlocklyArduinoServiceImpl implements BlocklyArduinoService {
+export class BlocklyArduinoServiceImpl
+  implements BlocklyArduinoService, Disposable
+{
+  private client: BlocklyArduinoServiceClient | undefined;
+
+  setClient(client: BlocklyArduinoServiceClient | undefined): void {
+    this.client = client;
+  }
+
+  dispose(): void {
+    this.client = undefined;
+  }
+
+  private notifyProgress(
+    progressId: string,
+    payload: {
+      phase: BlocklyArduinoProgressPhase;
+      downloadDone?: number;
+      downloadTotal?: number;
+    }
+  ): void {
+    this.client?.notifyBlocklyProgress({
+      progressId,
+      phase: payload.phase,
+      downloadDone: payload.downloadDone,
+      downloadTotal: payload.downloadTotal,
+    });
+  }
+
   async getPortableModeStatus(): Promise<PortableModeStatus> {
     const rootPath = process.env[PORTABLE_ROOT_ENV]?.trim();
     return rootPath
@@ -72,7 +104,7 @@ export class BlocklyArduinoServiceImpl implements BlocklyArduinoService {
     }
   }
 
-  async updateIfNeeded(): Promise<BlocklyArduinoUpdateResult> {
+  async updateIfNeeded(progressId: string): Promise<BlocklyArduinoUpdateResult> {
     const installDir = this.getInstallDir();
     const localPackagePath = path.join(installDir, 'package.json');
     const { version: localVersion, readError: localReadError } =
@@ -91,6 +123,7 @@ export class BlocklyArduinoServiceImpl implements BlocklyArduinoService {
       };
     }
 
+    this.notifyProgress(progressId, { phase: 'preparing' });
     await fs.rm(installDir, { recursive: true, force: true });
 
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'blockly-arduino-'));
@@ -99,10 +132,18 @@ export class BlocklyArduinoServiceImpl implements BlocklyArduinoService {
       const extractedRoot = path.join(tmpRoot, 'extract');
       await fs.mkdir(extractedRoot, { recursive: true });
 
-      await this.downloadArchive(zipPath);
+      await this.downloadArchive(zipPath, (loaded, total) => {
+        this.notifyProgress(progressId, {
+          phase: 'downloading',
+          downloadDone: loaded,
+          downloadTotal: total,
+        });
+      });
+      this.notifyProgress(progressId, { phase: 'extracting' });
       await this.extractArchive(zipPath, extractedRoot);
 
       const extractedProjectDir = await this.resolveExtractedProjectDir(extractedRoot);
+      this.notifyProgress(progressId, { phase: 'installing' });
       await fs.mkdir(installDir, { recursive: true });
       await fs.cp(extractedProjectDir, installDir, { recursive: true });
 
@@ -163,15 +204,50 @@ export class BlocklyArduinoServiceImpl implements BlocklyArduinoService {
     return localVersion !== remoteVersion;
   }
 
-  private async downloadArchive(destinationPath: string): Promise<void> {
+  private async downloadArchive(
+    destinationPath: string,
+    onProgress: (loaded: number, total: number) => void
+  ): Promise<void> {
     const response = await fetch(REMOTE_ARCHIVE_URL);
     if (!response.ok || !response.body) {
       throw new Error(
         `Could not download Blockly@rduino archive (${response.status} ${response.statusText}).`
       );
     }
-    const destination = createWriteStream(destinationPath);
-    await pipeline(response.body as unknown as NodeJS.ReadableStream, destination);
+    const rawTotal = response.headers.get('content-length');
+    const total = rawTotal ? parseInt(rawTotal, 10) : 0;
+    const file = createWriteStream(destinationPath);
+    let loaded = 0;
+    let lastReportAt = 0;
+      const maybeReport = (force: boolean) => {
+      const now = Date.now();
+      if (
+        !force &&
+        now - lastReportAt < 250 &&
+        (total <= 0 || loaded < total)
+      ) {
+        return;
+      }
+      lastReportAt = now;
+      const knownTotal = Number.isFinite(total) && total > 0 ? total : 0;
+      onProgress(loaded, knownTotal);
+    };
+    const counter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        loaded += chunk.length;
+        maybeReport(false);
+        callback(null, chunk);
+      },
+      flush(callback) {
+        maybeReport(true);
+        callback();
+      },
+    });
+    await pipeline(
+      response.body as NodeJS.ReadableStream,
+      counter,
+      file
+    );
   }
 
   private async resolveExtractedProjectDir(extractedRoot: string): Promise<string> {
@@ -195,6 +271,10 @@ export class BlocklyArduinoServiceImpl implements BlocklyArduinoService {
   }
 
   private getInstallDir(): string {
+    const portableRoot = process.env[PORTABLE_ROOT_ENV]?.trim();
+    if (portableRoot) {
+      return path.join(portableRoot, LOCAL_FOLDER_NAME);
+    }
     return path.join(path.dirname(process.execPath), LOCAL_FOLDER_NAME);
   }
 }
