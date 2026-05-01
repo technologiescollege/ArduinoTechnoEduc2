@@ -25,9 +25,16 @@ import { inject, injectable } from '@theia/core/shared/inversify';
 import { URI } from '@theia/core/shared/vscode-uri';
 import { log as logToFile, setup as setupFileLog } from 'node-log-rotate';
 import { fork } from 'node:child_process';
-import { promises as fs, readFileSync, rm, rmSync } from 'node:fs';
+import {
+  existsSync,
+  promises as fs,
+  readFileSync,
+  rm,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import type { AddressInfo } from 'node:net';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { Argv } from 'yargs';
 import { Sketch } from '../../common/protocol';
 import { poolWhile } from '../../common/utils';
@@ -116,6 +123,7 @@ interface WorkspaceOptions {
 }
 
 const WORKSPACES = 'workspaces';
+const PORTABLE_ROOT_ENV = 'ARDUINO_IDE_PORTABLE_ROOT';
 
 /**
  * If the app is started with `--open-devtools` argument, the `Dev Tools` will be opened.
@@ -576,6 +584,7 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
   }
 
   protected override async startBackend(): Promise<number> {
+    this.configurePortableMode();
     // Check if we should run everything as one process.
     const noBackendFork = process.argv.indexOf('--no-cluster') !== -1;
     // We cannot use the `process.cwd()` as the application project path (the location of the `package.json` in other words)
@@ -641,6 +650,38 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
         });
       });
     }
+  }
+
+  private configurePortableMode(): void {
+    const portableRoot = this.resolvePortableRoot();
+    if (portableRoot) {
+      process.env[PORTABLE_ROOT_ENV] = portableRoot;
+      console.info(`Portable mode enabled. Root: ${portableRoot}`);
+    } else {
+      delete process.env[PORTABLE_ROOT_ENV];
+    }
+  }
+
+  private resolvePortableRoot(): string | undefined {
+    const envRoot = process.env[PORTABLE_ROOT_ENV]?.trim();
+    if (envRoot) {
+      return envRoot;
+    }
+
+    const executablePortableDir = join(dirname(app.getPath('exe')), 'portable');
+    if (
+      existsSync(executablePortableDir) &&
+      statSync(executablePortableDir).isDirectory()
+    ) {
+      return executablePortableDir;
+    }
+
+    const cwdPortableDir = join(resolve(process.cwd()), 'portable');
+    if (existsSync(cwdPortableDir) && statSync(cwdPortableDir).isDirectory()) {
+      return cwdPortableDir;
+    }
+
+    return undefined;
   }
 
   private closedWorkspaces: WorkspaceOptions[] = [];

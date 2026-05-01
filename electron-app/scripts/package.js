@@ -42,6 +42,7 @@ async function run() {
     '-c.extraMetadata.main',
     './arduino-ide-electron-main.js',
   ];
+  const extraArgs = process.argv.slice(2);
   const updateChannel = getChannel();
   if (updateChannel) {
     // TODO: fix the default nightly update channel preference value if required.
@@ -51,7 +52,9 @@ async function run() {
     //   updateChannel
     // );
   }
-  const cp = exec('electron-builder', args, { stdio: 'inherit' });
+  const cp = exec('electron-builder', [...args, ...extraArgs], {
+    stdio: 'inherit',
+  });
   await cp;
 }
 

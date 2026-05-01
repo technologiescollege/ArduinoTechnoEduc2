@@ -51,6 +51,25 @@
     "boardsType": {
       "arduinoCertified": "Arduino certifié"
     },
+    "blocklyArduino": {
+      "confirmNo": "Non",
+      "confirmYes": "Oui",
+      "electronOnly": "Cette action est disponible uniquement dans l'application Electron.",
+      "menu": "Blockly@rduino",
+      "newVersionFound": "Nouvelle version trouvée ({0} -> {1}). Voulez-vous lancer la mise à jour ?",
+      "noLocalVersion": "Aucune version locale de Blockly@rduino n'a été trouvée. Voulez-vous lancer la mise à jour ?",
+      "noUpdateNeeded": "Blockly@rduino est déjà à jour ({0}).",
+      "openLocal": "Ouvrir Blockly@rduino",
+      "openMissing": "L'interface locale Blockly@rduino est introuvable. Lancez d'abord la mise à jour.",
+      "portableDisabled": "Mode portable désactivé. Créez un dossier 'portable' à côté de l'exécutable pour l'activer.",
+      "portableEnabled": "Mode portable activé. Chemin : {0}",
+      "showPortableStatus": "Afficher l'état du mode portable",
+      "upToDate": "Blockly@rduino est déjà à jour ({0}) dans : {1}",
+      "update": "Mettre à jour Blockly@rduino",
+      "updatedFromMissingOrInvalid": "Blockly@rduino a été installé depuis une version locale absente ou invalide vers {0}, dans : {1}",
+      "updatedFromOlderVersion": "Blockly@rduino a été mis à jour ({0} -> {1}) dans : {2}",
+      "updateFailed": "La mise à jour de Blockly@rduino a échoué : {0}"
+    },
     "bootloader": {
       "burnBootloader": "Graver la séquence d'initialisation",
       "burningBootloader": "Gravage du bootloader...",

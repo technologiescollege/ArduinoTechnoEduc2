@@ -56,6 +56,7 @@
     "watch": "lerna run watch --parallel",
     "build": "lerna run build",
     "build:dev": "lerna run build:dev",
+    "build:win:x64": "yarn build && yarn --cwd ./electron-app package -- --win --x64 -c.win.target=zip",
     "test": "lerna run test",
     "test:slow": "lerna run test:slow",
     "update:version": "node ./scripts/update-version.js",

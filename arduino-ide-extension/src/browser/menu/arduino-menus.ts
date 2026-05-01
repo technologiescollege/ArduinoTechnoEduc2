@@ -94,6 +94,10 @@ export namespace ArduinoMenus {
     ...TOOLS,
     '1_firmware_uploader',
   ];
+  // `Blockly@rduino`
+  export const TOOLS__BLOCKLY_GROUP = [...TOOLS, '1_5_blockly'];
+  export const TOOLS__BLOCKLY_SUBMENU = [...TOOLS__BLOCKLY_GROUP, '0_blockly'];
+  export const TOOLS__BLOCKLY_MAIN_GROUP = [...TOOLS__BLOCKLY_SUBMENU, '0_main'];
   // `Board`, `Port`, and `Get Board Info`.
   export const TOOLS__BOARD_SELECTION_GROUP = [...TOOLS, '2_board_selection'];
   // Core settings, such as `Processor` and `Programmers` for the board and `Burn Bootloader`

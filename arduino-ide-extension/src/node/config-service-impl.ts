@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import yaml from 'js-yaml';
 import { injectable, inject, named } from '@theia/core/shared/inversify';
 import URI from '@theia/core/lib/common/uri';
@@ -28,6 +28,7 @@ import {
 } from './cli-protocol/cc/arduino/cli/commands/v1/settings_pb';
 
 const deepmerge = require('deepmerge');
+const PORTABLE_ROOT_ENV = 'ARDUINO_IDE_PORTABLE_ROOT';
 
 @injectable()
 export class ConfigServiceImpl
@@ -186,7 +187,10 @@ export class ConfigServiceImpl
         this.logger.info(
           "'directories.data' and 'directories.user' are set in the CLI configuration model."
         );
-        return model as DefaultCliConfig;
+        return this.applyPortableMode(
+          model as DefaultCliConfig,
+          cliConfigPath
+        );
       }
       // The CLI can run with partial (missing `port`, `directories`), the IDE2 cannot.
       // We merge the default CLI config with the partial user's config.
@@ -203,7 +207,7 @@ export class ConfigServiceImpl
           mergedModel
         )}`
       );
-      return mergedModel;
+      return this.applyPortableMode(mergedModel, cliConfigPath);
     } catch (error) {
       if (ErrnoException.isENOENT(error)) {
         if (initializeIfAbsent) {
@@ -227,7 +231,10 @@ export class ConfigServiceImpl
     const config = JSON.parse(configRaw);
     const { user, data } = JSON.parse(directoriesRaw);
 
-    return { ...config.config, directories: { user, data } };
+    return this.withPortableDirectories({
+      ...config.config,
+      directories: { user, data },
+    });
   }
 
   private async initCliConfigTo(fsPathToDir: string): Promise<void> {
@@ -361,6 +368,50 @@ export class ConfigServiceImpl
     cliConfig: DefaultCliConfig
   ): Promise<void> {
     await fs.mkdir(cliConfig.directories.user, { recursive: true });
+  }
+
+  private withPortableDirectories(config: DefaultCliConfig): DefaultCliConfig {
+    const portableRoot = this.portableRoot();
+    if (!portableRoot) {
+      return config;
+    }
+    return {
+      ...config,
+      directories: {
+        ...config.directories,
+        data: join(portableRoot, 'data', 'Arduino15'),
+        user: join(portableRoot, 'sketchbook'),
+      },
+    };
+  }
+
+  private async applyPortableMode(
+    config: DefaultCliConfig,
+    cliConfigPath: string
+  ): Promise<DefaultCliConfig> {
+    const portableConfig = this.withPortableDirectories(config);
+    if (
+      portableConfig.directories.data !== config.directories.data ||
+      portableConfig.directories.user !== config.directories.user
+    ) {
+      this.logger.info(
+        `Portable mode directory override applied: ${JSON.stringify(
+          portableConfig.directories
+        )}`
+      );
+      await fs.mkdir(dirname(cliConfigPath), { recursive: true });
+      await fs.mkdir(portableConfig.directories.data, { recursive: true });
+      await fs.mkdir(portableConfig.directories.user, { recursive: true });
+      await fs.writeFile(cliConfigPath, yaml.safeDump(portableConfig), {
+        encoding: 'utf8',
+      });
+    }
+    return portableConfig;
+  }
+
+  private portableRoot(): string | undefined {
+    const value = process.env[PORTABLE_ROOT_ENV]?.trim();
+    return value || undefined;
   }
 }
 

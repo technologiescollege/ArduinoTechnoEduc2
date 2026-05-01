@@ -15,15 +15,20 @@ import { list as listDrives } from 'drivelist';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+const PORTABLE_ROOT_ENV = 'ARDUINO_IDE_PORTABLE_ROOT';
+const PORTABLE_CONFIG_DIR_NAME = '.arduinoIDE';
+
 @injectable()
 export class ConfigDirUriProvider {
   private uri: URI | undefined;
 
   configDirUri(): URI {
     if (!this.uri) {
-      this.uri = FileUri.create(
-        join(homedir(), BackendApplicationConfigProvider.get().configDirName)
-      );
+      const portableRoot = process.env[PORTABLE_ROOT_ENV]?.trim();
+      const configDir = portableRoot
+        ? join(portableRoot, PORTABLE_CONFIG_DIR_NAME)
+        : join(homedir(), BackendApplicationConfigProvider.get().configDirName);
+      this.uri = FileUri.create(configDir);
     }
     return this.uri;
   }

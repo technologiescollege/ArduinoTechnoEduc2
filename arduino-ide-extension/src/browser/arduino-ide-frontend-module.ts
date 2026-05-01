@@ -129,6 +129,7 @@ import {
 import { UploadSketch } from './contributions/upload-sketch';
 import { CommonFrontendContribution } from './theia/core/common-frontend-contribution';
 import { EditContributions } from './contributions/edit-contributions';
+import { BlocklyArduino } from './contributions/blockly-arduino';
 import { OpenSketchExternal } from './contributions/open-sketch-external';
 import { PreferencesContribution as TheiaPreferencesContribution } from '@theia/preferences/lib/browser/preferences-contribution';
 import { PreferencesContribution } from './theia/preferences/preferences-contribution';
@@ -154,6 +155,8 @@ import {
   OutputChannelRegistryMainImpl,
 } from './theia/plugin-ext/output-channel-registry-main';
 import {
+  BlocklyArduinoService,
+  BlocklyArduinoServicePath,
   ExecutableService,
   ExecutableServicePath,
   MonitorManagerProxy,
@@ -703,6 +706,16 @@ export default new ContainerModule((bind, unbind, isBound, rebind) => {
     )
     .inSingletonScope();
 
+  // Blockly@rduino updater service
+  bind(BlocklyArduinoService)
+    .toDynamicValue((context) =>
+      WebSocketConnectionProvider.createProxy(
+        context.container,
+        BlocklyArduinoServicePath
+      )
+    )
+    .inSingletonScope();
+
   Contribution.configure(bind, NewSketch);
   Contribution.configure(bind, OpenSketch);
   Contribution.configure(bind, Close);
@@ -712,6 +725,7 @@ export default new ContainerModule((bind, unbind, isBound, rebind) => {
   Contribution.configure(bind, UploadSketch);
   Contribution.configure(bind, OpenSketchExternal);
   Contribution.configure(bind, EditContributions);
+  Contribution.configure(bind, BlocklyArduino);
   Contribution.configure(bind, QuitApp);
   Contribution.configure(bind, SketchControl);
   Contribution.configure(bind, OpenSettings);
