@@ -6,6 +6,7 @@ import {
   contentTracing,
   Event as ElectronEvent,
   ipcMain,
+  IpcMainEvent,
 } from '@theia/core/electron-shared/electron';
 import {
   Disposable,
@@ -26,12 +27,15 @@ import { URI } from '@theia/core/shared/vscode-uri';
 import { WebContents } from '@theia/electron/shared/electron';
 import { log as logToFile, setup as setupFileLog } from 'node-log-rotate';
 import { fork } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
+  existsSync,
   mkdirSync,
   promises as fs,
   readFileSync,
   rm,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -42,6 +46,13 @@ import { poolWhile } from '../../common/utils';
 import {
   AppInfo,
   appInfoPropertyLiterals,
+  ARDUINO_BLOCKLY_PLOTTER_ARG,
+  CHANNEL_BLOCKLY_IDE_BRIDGE,
+  CHANNEL_BLOCKLY_IDE_FROM_HOST,
+  CHANNEL_BLOCKLY_IDE_LOAD_XML_SYNC,
+  CHANNEL_BLOCKLY_IDE_SAVE_CAPTURE,
+  CHANNEL_BLOCKLY_IDE_SAVE_XML,
+  CHANNEL_BLOCKLY_IDE_TO_HOST,
   CHANNEL_PLOTTER_WINDOW_DID_CLOSE,
   CHANNEL_SCHEDULE_DELETION,
   CHANNEL_SHOW_PLOTTER_WINDOW,
@@ -483,10 +494,155 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
     ipcMain.on(CHANNEL_SHOW_PLOTTER_WINDOW, (event, args) =>
       this.handleShowPlotterWindow(event, args)
     );
+    this.setupBlocklyIdeBridgeIpc();
+  }
+
+  /**
+   * Portable folder helper for Blockly session XML / captures (Blockly@rduino index_IDE).
+   */
+  private getPortableRootPath(): string {
+    return this.resolvePortableRoot();
+  }
+
+  private resolvePlotterPreloadPath(): string | undefined {
+    const candidate = join(
+      app.getAppPath(),
+      'lib',
+      'frontend',
+      'electron-browser',
+      'preload.js'
+    );
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+    console.warn(
+      `Blockly plotter preload not found at ${candidate}; BlocklyArduinoServer will not be injected.`
+    );
+    return undefined;
+  }
+
+  private findHostWindowIdForPlotterWebContents(sender: WebContents): number | undefined {
+    for (const [hostId, plotter] of this.plotterWindows) {
+      if (plotter.isDestroyed()) {
+        continue;
+      }
+      if (plotter.webContents.id === sender.id) {
+        return hostId;
+      }
+    }
+    return undefined;
+  }
+
+  private setupBlocklyIdeBridgeIpc(): void {
+    ipcMain.handle(
+      CHANNEL_BLOCKLY_IDE_BRIDGE,
+      async (
+        event,
+        payload: { method: string; args: unknown[] }
+      ): Promise<unknown> => {
+        const hostId = this.findHostWindowIdForPlotterWebContents(event.sender);
+        if (hostId === undefined) {
+          throw new Error(
+            'Blockly window is not linked to an Arduino IDE window.'
+          );
+        }
+        const hostWin = BrowserWindow.fromId(hostId);
+        if (!hostWin || hostWin.isDestroyed()) {
+          throw new Error('Arduino IDE window was closed.');
+        }
+        const id = randomUUID();
+        return await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            ipcMain.removeListener(CHANNEL_BLOCKLY_IDE_FROM_HOST, sub);
+            reject(new Error('Arduino IDE did not respond in time.'));
+          }, 120_000);
+          const sub = (
+            event: IpcMainEvent,
+            response: { id: string; result?: unknown; error?: string }
+          ): void => {
+            if (event.sender.id !== hostWin.webContents.id) {
+              return;
+            }
+            if (response.id !== id) {
+              return;
+            }
+            clearTimeout(timeout);
+            ipcMain.removeListener(CHANNEL_BLOCKLY_IDE_FROM_HOST, sub);
+            if (response.error) {
+              reject(new Error(response.error));
+            } else {
+              resolve(response.result);
+            }
+          };
+          ipcMain.on(CHANNEL_BLOCKLY_IDE_FROM_HOST, sub);
+          hostWin.webContents.send(CHANNEL_BLOCKLY_IDE_TO_HOST, {
+            id,
+            method: payload.method,
+            args: payload.args,
+          });
+        });
+      }
+    );
+
+    ipcMain.on(CHANNEL_BLOCKLY_IDE_LOAD_XML_SYNC, (event) => {
+      if (
+        this.findHostWindowIdForPlotterWebContents(event.sender) === undefined
+      ) {
+        event.returnValue = '';
+        return;
+      }
+      const xmlPath = join(
+        this.getPortableRootPath(),
+        'Blockly@rduino',
+        'blockly_workspace_session.xml'
+      );
+      try {
+        event.returnValue = readFileSync(xmlPath, 'utf-8');
+      } catch {
+        event.returnValue = '';
+      }
+    });
+
+    ipcMain.handle(
+      CHANNEL_BLOCKLY_IDE_SAVE_XML,
+      async (event, data: string) => {
+        if (
+          this.findHostWindowIdForPlotterWebContents(event.sender) === undefined
+        ) {
+          throw new Error('Not a Blockly plotter window.');
+        }
+        const dir = join(this.getPortableRootPath(), 'Blockly@rduino');
+        mkdirSync(dir, { recursive: true });
+        const xmlPath = join(dir, 'blockly_workspace_session.xml');
+        writeFileSync(xmlPath, data, 'utf-8');
+      }
+    );
+
+    ipcMain.handle(
+      CHANNEL_BLOCKLY_IDE_SAVE_CAPTURE,
+      async (event, xml: string) => {
+        if (
+          this.findHostWindowIdForPlotterWebContents(event.sender) === undefined
+        ) {
+          throw new Error('Not a Blockly plotter window.');
+        }
+        const dir = join(
+          this.getPortableRootPath(),
+          'Blockly@rduino',
+          'captures'
+        );
+        mkdirSync(dir, { recursive: true });
+        const fp = join(dir, `workspace_${Date.now()}.svg`);
+        writeFileSync(fp, xml, 'utf-8');
+        return fp;
+      }
+    );
   }
 
   // keys are the host window IDs
   private readonly plotterWindows = new Map<number, BrowserWindow>();
+  /** Whether the plotter was created with Blockly `index_IDE` bridge preload. */
+  private readonly plotterBlocklyBridge = new Map<number, boolean>();
 
   /** Normalizes `file:` URLs so Electron on Windows can load them (avoids malformed `%3A` / `%5C` paths). */
   private plotterUrlForLoad(url: string): string {
@@ -570,7 +726,18 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
     }
 
     const windowId = electronWindow.id;
+    const useBlocklyIdeBridge = args.injectBlocklyIdeBridge === true;
+
     let plotterWindow = this.plotterWindows.get(windowId);
+    if (plotterWindow) {
+      const priorBridge = this.plotterBlocklyBridge.get(windowId) === true;
+      if (priorBridge !== useBlocklyIdeBridge) {
+        plotterWindow.close();
+        this.plotterWindows.delete(windowId);
+        this.plotterBlocklyBridge.delete(windowId);
+        plotterWindow = undefined;
+      }
+    }
     if (plotterWindow) {
       if (!args.forceReload) {
         plotterWindow.focus();
@@ -579,7 +746,9 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
       }
       return;
     }
-
+    const plotterPreload = useBlocklyIdeBridge
+      ? this.resolvePlotterPreloadPath()
+      : undefined;
     plotterWindow = new BrowserWindow({
       width: 800,
       minWidth: 620,
@@ -591,12 +760,18 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
         devTools: true,
         nativeWindowOpen: true,
         openerId: electronWindow.webContents.id,
+        ...(plotterPreload ? { preload: plotterPreload } : {}),
+        ...(useBlocklyIdeBridge
+          ? { additionalArguments: [ARDUINO_BLOCKLY_PLOTTER_ARG] }
+          : {}),
       },
     });
     this.plotterWindows.set(windowId, plotterWindow);
+    this.plotterBlocklyBridge.set(windowId, useBlocklyIdeBridge);
     plotterWindow.setMenu(null);
     plotterWindow.on('closed', () => {
       this.plotterWindows.delete(windowId);
+      this.plotterBlocklyBridge.delete(windowId);
       electronWindow.webContents.send(CHANNEL_PLOTTER_WINDOW_DID_CLOSE);
     });
     plotterWindow.loadURL(this.plotterUrlForLoad(args.url));
@@ -783,6 +958,7 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
     window.on('close', () => {
       this.plotterWindows.get(window.id)?.close();
       this.plotterWindows.delete(window.id);
+      this.plotterBlocklyBridge.delete(window.id);
     });
   }
 
@@ -831,6 +1007,7 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
       ] of this.plotterWindows.entries()) {
         plotterWindow.close();
         this.plotterWindows.delete(hostWindowId);
+        this.plotterBlocklyBridge.delete(hostWindowId);
       }
     }
 

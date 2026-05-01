@@ -45,6 +45,8 @@ export type SaveDialogReturnValue = ElectronSaveDialogReturnValue;
 export interface ShowPlotterWindowParams {
   readonly url: string;
   readonly forceReload?: boolean;
+  /** When true, injects `BlocklyArduinoServer` preload (`index_IDE.html` compatibility). */
+  readonly injectBlocklyIdeBridge?: boolean;
 }
 export function isShowPlotterWindowParams(
   arg: unknown
@@ -53,7 +55,9 @@ export function isShowPlotterWindowParams(
     typeof arg === 'object' &&
     typeof (<ShowPlotterWindowParams>arg).url === 'string' &&
     ((<ShowPlotterWindowParams>arg).forceReload === undefined ||
-      typeof (<ShowPlotterWindowParams>arg).forceReload === 'boolean')
+      typeof (<ShowPlotterWindowParams>arg).forceReload === 'boolean') &&
+    ((<ShowPlotterWindowParams>arg).injectBlocklyIdeBridge === undefined ||
+      typeof (<ShowPlotterWindowParams>arg).injectBlocklyIdeBridge === 'boolean')
   );
 }
 
@@ -70,7 +74,11 @@ export interface ElectronArduino {
   ): Disposable;
   scheduleDeletion(sketch: Sketch): void;
   setRepresentedFilename(fsPath: string): void;
-  showPlotterWindow(params: { url: string; forceReload?: boolean }): void;
+  showPlotterWindow(params: {
+    url: string;
+    forceReload?: boolean;
+    injectBlocklyIdeBridge?: boolean;
+  }): void;
   /** Texte du bloc `#pre_previewArduino` dans la fenêtre Blockly (même fenêtre hôte que le traceur). */
   getBlocklyPreviewArduino(): Promise<string>;
   registerPlotterWindowCloseHandler(handler: () => void): Disposable;
@@ -98,6 +106,16 @@ export const CHANNEL_SET_REPRESENTED_FILENAME =
   'Arduino:SetRepresentedFilename';
 export const CHANNEL_SHOW_PLOTTER_WINDOW = 'Arduino:ShowPlotterWindow';
 export const CHANNEL_GET_BLOCKLY_PREVIEW = 'Arduino:GetBlocklyPreview';
+/** Plotter/BrowserWindow passes this argv flag so preload exposes Blockly `BlocklyArduinoServer` (index_IDE compatibility). */
+export const ARDUINO_BLOCKLY_PLOTTER_ARG = '--arduino-blockly-plotter';
+/** Blockly@rduino index_IDE → host IDE (paste/upload/save sketch). */
+export const CHANNEL_BLOCKLY_IDE_BRIDGE = 'Arduino:BlocklyIdeBridge';
+export const CHANNEL_BLOCKLY_IDE_TO_HOST = 'Arduino:BlocklyIdeToHost';
+export const CHANNEL_BLOCKLY_IDE_FROM_HOST = 'Arduino:BlocklyIdeFromHost';
+/** Sync load (Blockly `IDEloadXML()` expects a string synchronously). */
+export const CHANNEL_BLOCKLY_IDE_LOAD_XML_SYNC = 'Arduino:BlocklyIdeLoadXmlSync';
+export const CHANNEL_BLOCKLY_IDE_SAVE_XML = 'Arduino:BlocklyIdeSaveXml';
+export const CHANNEL_BLOCKLY_IDE_SAVE_CAPTURE = 'Arduino:BlocklyIdeSaveCapture';
 export const CHANNEL_OPEN_PATH = 'Arduino:OpenPath';
 export const CHANNEL_SET_MENU_WITH_NODE_ID = 'Arduino:SetMenuWithNodeId';
 // main to renderer

@@ -75,6 +75,111 @@ export class BlocklyArduino
 
   override onStart(_app: FrontendApplication): MaybePromise<void> {
     this.blocklyArduinoService.setClient(this);
+    this.registerBlocklyIdeBridgeHandler();
+  }
+
+  /**
+   * Blockly@rduino `index_IDE.html` calls global `BlocklyArduinoServer` (Arduino IDE 1 Java bridge).
+   * Electron exposes the same object from the plotter preload; requests run here.
+   */
+  private registerBlocklyIdeBridgeHandler(): void {
+    const register = (
+      window as unknown as {
+        __arduinoRegisterBlocklyIdeBridge?: (
+          fn: (msg: { method: string; args: unknown[] }) => Promise<unknown>
+        ) => void;
+      }
+    ).__arduinoRegisterBlocklyIdeBridge;
+    register?.((msg) => this.handleBlocklyIdeBridgeRequest(msg));
+  }
+
+  private async handleBlocklyIdeBridgeRequest(msg: {
+    method: string;
+    args: unknown[];
+  }): Promise<unknown> {
+    switch (msg.method) {
+      case 'pasteCode':
+        await this.replaceSketchEditorWithCode(String(msg.args[0] ?? ''));
+        return undefined;
+      case 'uploadCode':
+        await this.replaceSketchEditorWithCode(String(msg.args[0] ?? ''));
+        await this.commandService.executeCommand('arduino-upload-sketch');
+        return undefined;
+      case 'saveCode':
+        await this.replaceSketchEditorWithCode(String(msg.args[0] ?? ''));
+        await this.commandService.executeCommand('arduino-save-sketch');
+        return undefined;
+      default:
+        throw new Error(`Unknown Blockly IDE bridge method: ${msg.method}`);
+    }
+  }
+
+  /**
+   * Replaces the entire main sketch editor buffer (same as Blockly preview paste).
+   */
+  private async replaceSketchEditorWithCode(
+    text: string,
+    options: { notifySuccess?: boolean } = {}
+  ): Promise<void> {
+    const raw = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd();
+    if (!raw.trim()) {
+      throw new Error(
+        nls.localize(
+          'arduino/blocklyArduino/previewEmpty',
+          'No code found in Blockly@rduino preview (#pre_previewArduino). Open Blockly and generate code first.'
+        )
+      );
+    }
+    const sketch = await this.sketchServiceClient.currentSketch();
+    if (!CurrentSketch.isValid(sketch)) {
+      throw new Error(
+        nls.localize(
+          'arduino/blocklyArduino/noSketchForPaste',
+          'Open a sketch first, then replace its code with the Blockly preview.'
+        )
+      );
+    }
+    let codeEditor: monaco.editor.IStandaloneCodeEditor | undefined;
+    const editor = this.editorManager.currentEditor?.editor;
+    if (editor instanceof MonacoEditor) {
+      if (Sketch.isInSketch(editor.uri, sketch)) {
+        codeEditor = editor.getControl();
+      }
+    }
+    if (!codeEditor) {
+      const widget = await this.editorManager.open(new URI(sketch.mainFileUri));
+      if (widget.editor instanceof MonacoEditor) {
+        codeEditor = widget.editor.getControl();
+      }
+    }
+    if (!codeEditor) {
+      throw new Error(
+        nls.localize(
+          'arduino/blocklyArduino/noEditorForPaste',
+          'Could not open the sketch editor.'
+        )
+      );
+    }
+    const model = codeEditor.getModel();
+    if (!model) {
+      return;
+    }
+    const fullRange = model.getFullModelRange();
+    model.pushStackElement();
+    codeEditor.executeEdits('blockly-ide-bridge', [
+      { range: fullRange, text: raw, forceMoveMarkers: true },
+    ]);
+    model.pushStackElement();
+    codeEditor.setPosition({ lineNumber: 1, column: 1 });
+    codeEditor.focus();
+    if (options.notifySuccess) {
+      this.messageService.info(
+        nls.localize(
+          'arduino/blocklyArduino/previewPasted',
+          'Blockly preview replaced the entire editor content.'
+        )
+      );
+    }
   }
 
   notifyBlocklyProgress(progress: BlocklyArduinoProgress): void {
@@ -198,6 +303,7 @@ export class BlocklyArduino
         window.electronArduino.showPlotterWindow({
           url: indexUrl,
           forceReload: true,
+          injectBlocklyIdeBridge: true,
         });
       },
     });
@@ -212,66 +318,14 @@ export class BlocklyArduino
           );
           return;
         }
-        const raw = await window.electronArduino.getBlocklyPreviewArduino();
-        const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd();
-        if (!text.trim()) {
-          this.messageService.warn(
-            nls.localize(
-              'arduino/blocklyArduino/previewEmpty',
-              'No code found in Blockly@rduino preview (#pre_previewArduino). Open Blockly and generate code first.'
-            )
-          );
-          return;
+        try {
+          const raw = await window.electronArduino.getBlocklyPreviewArduino();
+          await this.replaceSketchEditorWithCode(raw, { notifySuccess: true });
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : String(err);
+          this.messageService.warn(message);
         }
-        const sketch = await this.sketchServiceClient.currentSketch();
-        if (!CurrentSketch.isValid(sketch)) {
-          this.messageService.warn(
-            nls.localize(
-              'arduino/blocklyArduino/noSketchForPaste',
-              'Open a sketch first, then paste the Blockly preview into the editor.'
-            )
-          );
-          return;
-        }
-        let codeEditor: monaco.editor.IStandaloneCodeEditor | undefined;
-        const editor = this.editorManager.currentEditor?.editor;
-        if (editor instanceof MonacoEditor) {
-          if (Sketch.isInSketch(editor.uri, sketch)) {
-            codeEditor = editor.getControl();
-          }
-        }
-        if (!codeEditor) {
-          const widget = await this.editorManager.open(new URI(sketch.mainFileUri));
-          if (widget.editor instanceof MonacoEditor) {
-            codeEditor = widget.editor.getControl();
-          }
-        }
-        if (!codeEditor) {
-          this.messageService.warn(
-            nls.localize(
-              'arduino/blocklyArduino/noEditorForPaste',
-              'Could not open the sketch editor.'
-            )
-          );
-          return;
-        }
-        const model = codeEditor.getModel();
-        const selection = codeEditor.getSelection();
-        if (!model || !selection) {
-          return;
-        }
-        model.pushStackElement();
-        codeEditor.executeEdits('blockly-preview', [
-          { range: selection, text, forceMoveMarkers: true },
-        ]);
-        model.pushStackElement();
-        codeEditor.focus();
-        this.messageService.info(
-          nls.localize(
-            'arduino/blocklyArduino/previewPasted',
-            'Blockly preview code was inserted into the editor.'
-          )
-        );
       },
     });
     registry.registerCommand(BlocklyArduino.Commands.SHOW_PORTABLE_STATUS, {
@@ -325,7 +379,7 @@ export class BlocklyArduino
       commandId: BlocklyArduino.Commands.PASTE_PREVIEW_INTO_SKETCH.id,
       label: nls.localize(
         'arduino/blocklyArduino/pastePreviewIntoSketch',
-        'Insert Blockly preview into editor'
+        'Replace sketch with Blockly preview'
       ),
       order: '2',
     });
