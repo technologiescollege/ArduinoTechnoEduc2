@@ -42,9 +42,22 @@ jobs:
       - name: Build Windows x64 ZIP
         run: yarn build:win:x64
 
-      - name: Upload ZIP artifact
+      # upload-artifact always wraps files in a .zip; uploading electron-builder's .zip
+      # would yield a "zip inside a zip". Extract first so the downloaded artifact is one archive.
+      - name: Unpack build output for artifact
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path electron-app/dist -Filter '*win*.zip' -File | Select-Object -First 1
+          if (-not $zip) { throw "No Windows x64 zip found under electron-app/dist" }
+          $dest = Join-Path $zip.DirectoryName "arduino-ide-windows-x64-unpacked"
+          if (Test-Path $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+          New-Item -ItemType Directory -Path $dest | Out-Null
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $dest -Force
+          Write-Host "Unpacked $($zip.Name) -> $dest"
+
+      - name: Upload Windows x64 app (single-level zip)
         uses: actions/upload-artifact@v4
         with:
-          name: arduino-ide-windows-x64-zip
-          path: electron-app/dist/*win*.zip
+          name: arduino-ide-windows-x64
+          path: electron-app/dist/arduino-ide-windows-x64-unpacked
           if-no-files-found: error

@@ -90,7 +90,13 @@ export class BlocklyArduino
         ) => void;
       }
     ).__arduinoRegisterBlocklyIdeBridge;
-    register?.((msg) => this.handleBlocklyIdeBridgeRequest(msg));
+    if (typeof register !== 'function') {
+      this.logger.warn(
+        '__arduinoRegisterBlocklyIdeBridge missing; Blockly@rduino IDE buttons will not reach the sketch.'
+      );
+      return;
+    }
+    register((msg) => this.handleBlocklyIdeBridgeRequest(msg));
   }
 
   private async handleBlocklyIdeBridgeRequest(msg: {

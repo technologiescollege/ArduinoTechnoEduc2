@@ -50,29 +50,38 @@ const isBlocklyPlotterWindow =
   typeof process !== 'undefined' &&
   process.argv.includes(ARDUINO_BLOCKLY_PLOTTER_ARG);
 
+function invokeBlocklyIdeBridge(
+  method: string,
+  args: unknown[]
+): Promise<unknown> {
+  return ipcRenderer
+    .invoke(CHANNEL_BLOCKLY_IDE_BRIDGE, { method, args })
+    .catch((err: unknown) => {
+      console.error(`BlocklyArduinoServer.${method} failed:`, err);
+      throw err;
+    });
+}
+
 /** Blockly@rduino `index_IDE.html` expects global `BlocklyArduinoServer` (Arduino IDE 1 Java bridge). */
 function exposeBlocklyArduinoServerApi(): void {
   contextBridge.exposeInMainWorld('BlocklyArduinoServer', {
     pasteCode: (code: string) =>
-      ipcRenderer.invoke(CHANNEL_BLOCKLY_IDE_BRIDGE, {
-        method: 'pasteCode',
-        args: [code],
-      }),
+      invokeBlocklyIdeBridge('pasteCode', [code]) as Promise<void>,
     uploadCode: (code: string) =>
-      ipcRenderer.invoke(CHANNEL_BLOCKLY_IDE_BRIDGE, {
-        method: 'uploadCode',
-        args: [code],
-      }),
+      invokeBlocklyIdeBridge('uploadCode', [code]) as Promise<void>,
     saveCode: (data: string) =>
-      ipcRenderer.invoke(CHANNEL_BLOCKLY_IDE_BRIDGE, {
-        method: 'saveCode',
-        args: [data],
-      }),
+      invokeBlocklyIdeBridge('saveCode', [data]) as Promise<void>,
     IDEsaveXML: (data: string) =>
-      ipcRenderer.invoke(CHANNEL_BLOCKLY_IDE_SAVE_XML, data),
+      ipcRenderer.invoke(CHANNEL_BLOCKLY_IDE_SAVE_XML, data).catch((err) => {
+        console.error('BlocklyArduinoServer.IDEsaveXML failed:', err);
+        throw err;
+      }),
     IDEloadXML: () => ipcRenderer.sendSync(CHANNEL_BLOCKLY_IDE_LOAD_XML_SYNC),
     saveWorkspaceCapture: (xml: string) =>
-      ipcRenderer.invoke(CHANNEL_BLOCKLY_IDE_SAVE_CAPTURE, xml),
+      ipcRenderer.invoke(CHANNEL_BLOCKLY_IDE_SAVE_CAPTURE, xml).catch((err) => {
+        console.error('BlocklyArduinoServer.saveWorkspaceCapture failed:', err);
+        throw err;
+      }),
   });
 }
 
@@ -174,8 +183,11 @@ const api: ElectronArduino = {
     ipcRenderer.send(CHANNEL_SCHEDULE_DELETION, sketch),
   setRepresentedFilename: (fsPath: string) =>
     ipcRenderer.send(CHANNEL_SET_REPRESENTED_FILENAME, fsPath),
-  showPlotterWindow: (params: { url: string; forceReload?: boolean }) =>
-    ipcRenderer.send(CHANNEL_SHOW_PLOTTER_WINDOW, params),
+  showPlotterWindow: (params: {
+    url: string;
+    forceReload?: boolean;
+    injectBlocklyIdeBridge?: boolean;
+  }) => ipcRenderer.send(CHANNEL_SHOW_PLOTTER_WINDOW, params),
   getBlocklyPreviewArduino: () =>
     ipcRenderer.invoke(CHANNEL_GET_BLOCKLY_PREVIEW) as Promise<string>,
   registerPlotterWindowCloseHandler: (handler: () => void) => {

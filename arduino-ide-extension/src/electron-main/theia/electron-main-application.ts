@@ -505,18 +505,26 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
   }
 
   private resolvePlotterPreloadPath(): string | undefined {
-    const candidate = join(
+    const bases = [
       app.getAppPath(),
-      'lib',
-      'frontend',
-      'electron-browser',
-      'preload.js'
-    );
-    if (existsSync(candidate)) {
-      return candidate;
+      process.env.THEIA_APP_PROJECT_PATH,
+    ].filter((b): b is string => typeof b === 'string' && b.trim().length > 0);
+
+    const relativePaths = [
+      ['lib', 'frontend', 'preload.js'],
+      ['lib', 'frontend', 'electron-browser', 'preload.js'],
+    ];
+
+    for (const base of bases) {
+      for (const segments of relativePaths) {
+        const candidate = join(base, ...segments);
+        if (existsSync(candidate)) {
+          return candidate;
+        }
+      }
     }
     console.warn(
-      `Blockly plotter preload not found at ${candidate}; BlocklyArduinoServer will not be injected.`
+      'Blockly plotter preload not found (tried lib/frontend/preload.js and lib/frontend/electron-browser/preload.js under app path and THEIA_APP_PROJECT_PATH); BlocklyArduinoServer will not be injected.'
     );
     return undefined;
   }

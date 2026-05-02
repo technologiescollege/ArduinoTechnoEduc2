@@ -27,7 +27,6 @@ import {
   SettingsSetValueRequest,
 } from './cli-protocol/cc/arduino/cli/commands/v1/settings_pb';
 
-const deepmerge = require('deepmerge');
 const PORTABLE_ROOT_ENV = 'ARDUINO_IDE_PORTABLE_ROOT';
 
 @injectable()
@@ -200,27 +199,12 @@ export class ConfigServiceImpl
       });
       const model = (yaml.safeLoad(content) || {}) as CliConfig;
       this.logger.info(`Loaded CLI configuration: ${JSON.stringify(model)}`);
-      if (model.directories?.data && model.directories?.user) {
-        this.logger.info(
-          "'directories.data' and 'directories.user' are set in the CLI configuration model."
-        );
-        return this.applyPortableMode(
-          model as DefaultCliConfig,
-          cliConfigPath
-        );
-      }
-      // The CLI can run with partial (missing `port`, `directories`), the IDE2 cannot.
-      // We merge the default CLI config with the partial user's config.
+      // Always merge with a skeleton that includes `directories` and `board_manager`.
+      // Without those keys, arduino-cli falls back to the global user profile; empty
+      // values let applyPortableMode / IDE fill local (portable) paths.
+      const mergedModel = this.mergeCliModelWithDefaultSkeleton(model);
       this.logger.info(
-        "Loading fallback CLI configuration to get 'directories.data' and 'directories.user'"
-      );
-      const fallbackModel = await this.getFallbackCliConfig();
-      this.logger.info(
-        `Loaded fallback CLI configuration: ${JSON.stringify(fallbackModel)}`
-      );
-      const mergedModel = deepmerge(fallbackModel, model) as DefaultCliConfig;
-      this.logger.info(
-        `Merged CLI configuration with the fallback: ${JSON.stringify(
+        `Merged CLI configuration with default skeleton: ${JSON.stringify(
           mergedModel
         )}`
       );
@@ -234,6 +218,24 @@ export class ConfigServiceImpl
       }
       throw error;
     }
+  }
+
+  /**
+   * Ensures `arduino-cli.yaml` always has `directories` and `board_manager` so the CLI
+   * does not resolve to OS-wide defaults when those sections are missing.
+   */
+  private mergeCliModelWithDefaultSkeleton(model: CliConfig): DefaultCliConfig {
+    const dirs = model.directories;
+    const user = dirs && typeof dirs.user === 'string' ? dirs.user : '';
+    const data = dirs && typeof dirs.data === 'string' ? dirs.data : '';
+    const urls = model.board_manager?.additional_urls;
+    return {
+      ...(model as DefaultCliConfig),
+      directories: { user, data },
+      board_manager: {
+        additional_urls: Array.isArray(urls) ? [...urls] : [],
+      },
+    };
   }
 
   private async getFallbackCliConfig(): Promise<DefaultCliConfig> {
@@ -255,8 +257,15 @@ export class ConfigServiceImpl
   }
 
   private async initCliConfigTo(fsPathToDir: string): Promise<void> {
-    const cliPath = this.daemon.getExecPath();
-    await spawnCommand(cliPath, ['config', 'init', '--dest-dir', fsPathToDir]);
+    await fs.mkdir(fsPathToDir, { recursive: true });
+    const cliConfigPath = join(fsPathToDir, CLI_CONFIG);
+    const skeleton =
+      'directories:\n' +
+      '  user: \n' +
+      '  data: \n' +
+      'board_manager:\n' +
+      '  additional_urls: []\n';
+    await fs.writeFile(cliConfigPath, skeleton, 'utf8');
   }
 
   private async mapCliConfigToAppConfig(
