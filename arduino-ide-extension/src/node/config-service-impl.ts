@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 import { injectable, inject, named } from '@theia/core/shared/inversify';
 import URI from '@theia/core/lib/common/uri';
@@ -411,8 +411,20 @@ export class ConfigServiceImpl
 
   private portableRoot(): string | undefined {
     const value = process.env[PORTABLE_ROOT_ENV]?.trim();
-    return value || undefined;
+    if (value) {
+      return value;
+    }
+    // Fallback when the Electron fork env was incomplete (match dev layout).
+    if (process.env.THEIA_ELECTRON_VERSION) {
+      return resolvePortableRootFromWorkingDirectory();
+    }
+    return undefined;
   }
+}
+
+/** Mirrors ElectronMainApplication dev portable path when env is missing in the backend. */
+function resolvePortableRootFromWorkingDirectory(): string {
+  return join(resolve(process.cwd()), 'portable');
 }
 
 class InvalidConfigError extends Error {

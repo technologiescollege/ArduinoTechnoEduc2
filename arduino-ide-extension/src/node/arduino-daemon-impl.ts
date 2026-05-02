@@ -46,9 +46,11 @@ export class ArduinoDaemonImpl
   private _port = new Deferred<number>();
 
   // Backend application lifecycle.
+  // The CLI daemon is started from ConfigServiceImpl after `arduino-cli.yaml` is written
+  // (portable `directories.data` / `directories.user`) so libraries and toolchains use `portable/`.
 
   onStart(): void {
-    this.start(); // no await
+    // no-op: see ConfigServiceImpl.startDaemonWithPortableCliConfig
   }
 
   // Daemon API

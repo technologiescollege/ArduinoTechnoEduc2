@@ -95,7 +95,7 @@ export class BlocklyArduinoServiceImpl
   }
 
   async getLocalIndexPath(): Promise<string | undefined> {
-    const indexPath = path.join(this.getInstallDir(), 'index.html');
+    const indexPath = path.join(this.getInstallDir(), 'index_IDE.html');
     try {
       await fs.access(indexPath);
       return indexPath;

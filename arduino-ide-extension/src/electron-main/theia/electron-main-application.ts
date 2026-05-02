@@ -26,7 +26,7 @@ import { inject, injectable } from '@theia/core/shared/inversify';
 import { URI } from '@theia/core/shared/vscode-uri';
 import { WebContents } from '@theia/electron/shared/electron';
 import { log as logToFile, setup as setupFileLog } from 'node-log-rotate';
-import { fork } from 'node:child_process';
+import { fork, ForkOptions } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   existsSync,
@@ -886,6 +886,24 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
         });
       });
     }
+  }
+
+  /**
+   * Ensures the forked backend inherits `ARDUINO_IDE_PORTABLE_ROOT` so CLI data/libraries
+   * install under `portable/` (arduino-cli.yaml directories.data).
+   */
+  protected override async getForkOptions(): Promise<ForkOptions> {
+    const base = await super.getForkOptions();
+    this.configurePortableMode();
+    const portableRoot = process.env[PORTABLE_ROOT_ENV];
+    return {
+      ...base,
+      env: {
+        ...base.env,
+        [PORTABLE_ROOT_ENV]:
+          portableRoot ?? this.resolvePortableRoot(),
+      },
+    };
   }
 
   private configurePortableMode(): void {
