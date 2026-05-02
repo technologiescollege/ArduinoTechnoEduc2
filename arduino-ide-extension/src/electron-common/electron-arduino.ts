@@ -79,8 +79,6 @@ export interface ElectronArduino {
     forceReload?: boolean;
     injectBlocklyIdeBridge?: boolean;
   }): void;
-  /** Texte du bloc `#pre_previewArduino` dans la fenêtre Blockly (même fenêtre hôte que le traceur). */
-  getBlocklyPreviewArduino(): Promise<string>;
   registerPlotterWindowCloseHandler(handler: () => void): Disposable;
   openPath(fsPath: string): void;
   // Unlike the Theia implementation, IDE2 uses the command IDs, and not the running-index handler IDs.
@@ -105,7 +103,6 @@ export const CHANNEL_SCHEDULE_DELETION = 'Arduino:ScheduleDeletion';
 export const CHANNEL_SET_REPRESENTED_FILENAME =
   'Arduino:SetRepresentedFilename';
 export const CHANNEL_SHOW_PLOTTER_WINDOW = 'Arduino:ShowPlotterWindow';
-export const CHANNEL_GET_BLOCKLY_PREVIEW = 'Arduino:GetBlocklyPreview';
 /** Plotter/BrowserWindow passes this argv flag so preload exposes Blockly `BlocklyArduinoServer` (index_IDE compatibility). */
 export const ARDUINO_BLOCKLY_PLOTTER_ARG = '--arduino-blockly-plotter';
 /** Blockly@rduino index_IDE → host IDE (paste/upload/save sketch). */

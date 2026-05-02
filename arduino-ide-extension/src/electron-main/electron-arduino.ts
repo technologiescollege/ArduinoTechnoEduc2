@@ -23,7 +23,6 @@ import {
   CHANNEL_IS_FIRST_WINDOW,
   CHANNEL_MAIN_MENU_ITEM_DID_CLICK,
   CHANNEL_OPEN_PATH,
-  CHANNEL_GET_BLOCKLY_PREVIEW,
   CHANNEL_QUIT_APP,
   CHANNEL_SEND_STARTUP_TASKS,
   CHANNEL_SET_MENU_WITH_NODE_ID,
@@ -106,12 +105,6 @@ export class ElectronArduino implements ElectronMainApplicationContribution {
     });
     ipcMain.on(CHANNEL_OPEN_PATH, (_, fsPath: string) => {
       shell.openPath(fsPath);
-    });
-    ipcMain.handle(CHANNEL_GET_BLOCKLY_PREVIEW, async (event) => {
-      if (!(app instanceof ElectronMainApplication)) {
-        return '';
-      }
-      return app.getBlocklyPreviewArduinoText(event.sender);
     });
     ipcMain.on(
       CHANNEL_SET_MENU_WITH_NODE_ID,

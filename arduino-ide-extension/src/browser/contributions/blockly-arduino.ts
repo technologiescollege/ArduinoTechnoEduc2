@@ -121,18 +121,15 @@ export class BlocklyArduino
   }
 
   /**
-   * Replaces the entire main sketch editor buffer (same as Blockly preview paste).
+   * Replaces the entire main sketch editor buffer (Blockly IDE bridge paste/upload/save).
    */
-  private async replaceSketchEditorWithCode(
-    text: string,
-    options: { notifySuccess?: boolean } = {}
-  ): Promise<void> {
+  private async replaceSketchEditorWithCode(text: string): Promise<void> {
     const raw = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trimEnd();
     if (!raw.trim()) {
       throw new Error(
         nls.localize(
           'arduino/blocklyArduino/previewEmpty',
-          'No code found in Blockly@rduino preview (#pre_previewArduino). Open Blockly and generate code first.'
+          'No Arduino code to paste. Generate code in Blockly@rduino first.'
         )
       );
     }
@@ -141,7 +138,7 @@ export class BlocklyArduino
       throw new Error(
         nls.localize(
           'arduino/blocklyArduino/noSketchForPaste',
-          'Open a sketch first, then replace its code with the Blockly preview.'
+          'Open a sketch first to receive code from Blockly@rduino.'
         )
       );
     }
@@ -178,14 +175,6 @@ export class BlocklyArduino
     model.pushStackElement();
     codeEditor.setPosition({ lineNumber: 1, column: 1 });
     codeEditor.focus();
-    if (options.notifySuccess) {
-      this.messageService.info(
-        nls.localize(
-          'arduino/blocklyArduino/previewPasted',
-          'Blockly preview replaced the entire editor content.'
-        )
-      );
-    }
   }
 
   notifyBlocklyProgress(progress: BlocklyArduinoProgress): void {
@@ -313,27 +302,6 @@ export class BlocklyArduino
         });
       },
     });
-    registry.registerCommand(BlocklyArduino.Commands.PASTE_PREVIEW_INTO_SKETCH, {
-      execute: async () => {
-        if (!window.electronArduino?.getBlocklyPreviewArduino) {
-          this.messageService.error(
-            nls.localize(
-              'arduino/blocklyArduino/electronOnly',
-              'This action is only available in the Electron application.'
-            )
-          );
-          return;
-        }
-        try {
-          const raw = await window.electronArduino.getBlocklyPreviewArduino();
-          await this.replaceSketchEditorWithCode(raw, { notifySuccess: true });
-        } catch (err) {
-          const message =
-            err instanceof Error ? err.message : String(err);
-          this.messageService.warn(message);
-        }
-      },
-    });
     registry.registerCommand(BlocklyArduino.Commands.SHOW_PORTABLE_STATUS, {
       execute: async () => {
         const status = await this.blocklyArduinoService.getPortableModeStatus();
@@ -380,14 +348,6 @@ export class BlocklyArduino
         'Open Blockly@rduino'
       ),
       order: '1',
-    });
-    registry.registerMenuAction(ArduinoMenus.TOOLS__BLOCKLY_MAIN_GROUP, {
-      commandId: BlocklyArduino.Commands.PASTE_PREVIEW_INTO_SKETCH.id,
-      label: nls.localize(
-        'arduino/blocklyArduino/pastePreviewIntoSketch',
-        'Replace sketch with Blockly preview'
-      ),
-      order: '2',
     });
     registry.registerMenuAction(ArduinoMenus.HELP__MAIN_GROUP, {
       commandId: BlocklyArduino.Commands.SHOW_PORTABLE_STATUS.id,
@@ -469,9 +429,6 @@ export namespace BlocklyArduino {
     };
     export const OPEN_LOCAL: Command = {
       id: 'arduino-blockly-arduino-open-local',
-    };
-    export const PASTE_PREVIEW_INTO_SKETCH: Command = {
-      id: 'arduino-blockly-arduino-paste-preview',
     };
     export const SHOW_PORTABLE_STATUS: Command = {
       id: 'arduino-blockly-arduino-show-portable-status',

@@ -664,53 +664,6 @@ export class ElectronMainApplication extends TheiaElectronMainApplication {
     }
   }
 
-  /**
-   * Reads generated Arduino code from the Blockly@rduino window (`#pre_previewArduino`),
-   * including same-origin iframes.
-   */
-  async getBlocklyPreviewArduinoText(sender: WebContents): Promise<string> {
-    const hostWindow = BrowserWindow.fromWebContents(sender);
-    if (!hostWindow) {
-      return '';
-    }
-    const plotter = this.plotterWindows.get(hostWindow.id);
-    if (!plotter || plotter.isDestroyed()) {
-      return '';
-    }
-    const wc = plotter.webContents;
-    if (wc.isDestroyed()) {
-      return '';
-    }
-    const script = `(function () {
-  function textFrom(el) {
-    if (!el) return '';
-    return (typeof el.innerText === 'string' ? el.innerText : el.textContent) || '';
-  }
-  function findInDoc(doc) {
-    if (!doc) return null;
-    var el = doc.getElementById('pre_previewArduino');
-    if (el) return el;
-    var frames = doc.querySelectorAll('iframe');
-    for (var i = 0; i < frames.length; i++) {
-      try {
-        var fd = frames[i].contentDocument;
-        el = findInDoc(fd);
-        if (el) return el;
-      } catch (e) {}
-    }
-    return null;
-  }
-  return textFrom(findInDoc(document));
-})()`;
-    try {
-      const result = await wc.executeJavaScript(script, true);
-      return typeof result === 'string' ? result : '';
-    } catch (err) {
-      console.warn('getBlocklyPreviewArduinoText:', err);
-      return '';
-    }
-  }
-
   private handleShowPlotterWindow(
     event: Electron.IpcMainEvent,
     args: unknown
