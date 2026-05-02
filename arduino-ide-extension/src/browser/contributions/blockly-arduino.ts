@@ -17,10 +17,15 @@ import {
 } from '../../common/protocol/blockly-arduino-service';
 import { ExecuteWithProgress } from '../../common/protocol/progressible';
 import { ArduinoMenus } from '../menu/arduino-menus';
+import { BoardsServiceProvider } from '../boards/boards-service-provider';
 import {
   CurrentSketch,
   SketchesServiceClientImpl,
 } from '../sketches-service-client-impl';
+import {
+  blocklyBoardQueryValueFromFqbn,
+  blocklyIndexUrlWithBoard,
+} from './blockly-rduino-board-from-fqbn';
 import {
   Command,
   CommandRegistry,
@@ -67,6 +72,9 @@ export class BlocklyArduino
 
   @inject(SketchesServiceClientImpl)
   protected readonly sketchServiceClient: SketchesServiceClientImpl;
+
+  @inject(BoardsServiceProvider)
+  protected readonly boardsServiceProvider: BoardsServiceProvider;
 
   private blocklyProgress?: {
     progressId: string;
@@ -275,6 +283,7 @@ export class BlocklyArduino
     });
     registry.registerCommand(BlocklyArduino.Commands.OPEN_LOCAL, {
       execute: async () => {
+        await this.blocklyArduinoService.ensureBlocklyIdeBoardUrlPatch();
         const indexPath = await this.blocklyArduinoService.getLocalIndexPath();
         if (!indexPath) {
           this.messageService.warn(
@@ -285,7 +294,12 @@ export class BlocklyArduino
           );
           return;
         }
-        const indexUrl = blocklyLocalPathToFileUrl(indexPath);
+        const fqbn = this.boardsServiceProvider.boardsConfig.selectedBoard?.fqbn;
+        const boardId = blocklyBoardQueryValueFromFqbn(fqbn);
+        const indexUrl = blocklyIndexUrlWithBoard(
+          blocklyLocalPathToFileUrl(indexPath),
+          boardId
+        );
         if (!window.electronArduino) {
           this.messageService.error(
             nls.localize(

@@ -56,6 +56,7 @@
     "watch": "lerna run watch --parallel",
     "build": "lerna run build",
     "build:dev": "lerna run build:dev",
+    "build:linux": "yarn build && yarn --cwd electron-app rebuild && yarn --cwd electron-app build && yarn --cwd electron-app package -- --linux --x64 -c.linux.target=zip",
     "build:win:x64": "yarn --cwd ./arduino-ide-extension build && yarn --cwd ./electron-app rebuild && yarn --cwd ./electron-app build && yarn --cwd ./electron-app package -- --win --x64 -c.win.target=zip",
     "test": "lerna run test",
     "test:slow": "lerna run test:slow",

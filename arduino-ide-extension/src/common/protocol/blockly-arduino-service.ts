@@ -47,4 +47,9 @@ export interface BlocklyArduinoService
   updateIfNeeded(progressId: string): Promise<BlocklyArduinoUpdateResult>;
   getLocalIndexPath(): Promise<string | undefined>;
   getPortableModeStatus(): Promise<PortableModeStatus>;
+  /**
+   * Corrige Blockly@rduino pour que `?board=` fonctionne pour toutes les cartes du menu,
+   * pas seulement l’optgroup « Arduino » (voir `blockly@rduino_core_IDE.js` `setArduinoBoard`).
+   */
+  ensureBlocklyIdeBoardUrlPatch(): Promise<void>;
 }

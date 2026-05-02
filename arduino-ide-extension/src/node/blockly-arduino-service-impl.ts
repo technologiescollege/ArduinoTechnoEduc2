@@ -25,6 +25,12 @@ const REMOTE_ARCHIVE_URL =
 const LOCAL_FOLDER_NAME = 'Blockly@rduino';
 const PORTABLE_ROOT_ENV = 'ARDUINO_IDE_PORTABLE_ROOT';
 
+/** Upstream ne vérifie que l’optgroup Arduino ; `?board=esp32` etc. était ignoré. */
+const BLOCKLY_CORE_IDE_UNPATCHED =
+  `$("#board_select optgroup[label='Arduino'] option[value='" + boardId + "']").length`;
+const BLOCKLY_CORE_IDE_PATCHED =
+  `$("#board_select option[value='" + boardId + "']").length`;
+
 @injectable()
 export class BlocklyArduinoServiceImpl
   implements BlocklyArduinoService, Disposable
@@ -104,6 +110,26 @@ export class BlocklyArduinoServiceImpl
     }
   }
 
+  async ensureBlocklyIdeBoardUrlPatch(): Promise<void> {
+    const installDir = this.getInstallDir();
+    const coreIde = path.join(
+      installDir,
+      'core',
+      'BlocklyArduino',
+      'blockly@rduino_core_IDE.js'
+    );
+    try {
+      let text = await fs.readFile(coreIde, 'utf8');
+      if (!text.includes(BLOCKLY_CORE_IDE_UNPATCHED)) {
+        return;
+      }
+      text = text.split(BLOCKLY_CORE_IDE_UNPATCHED).join(BLOCKLY_CORE_IDE_PATCHED);
+      await fs.writeFile(coreIde, text, 'utf8');
+    } catch {
+      /* installation absente ou fichier non lisible */
+    }
+  }
+
   async updateIfNeeded(progressId: string): Promise<BlocklyArduinoUpdateResult> {
     const installDir = this.getInstallDir();
     const localPackagePath = path.join(installDir, 'package.json');
@@ -146,6 +172,7 @@ export class BlocklyArduinoServiceImpl
       this.notifyProgress(progressId, { phase: 'installing' });
       await fs.mkdir(installDir, { recursive: true });
       await fs.cp(extractedProjectDir, installDir, { recursive: true });
+      await this.ensureBlocklyIdeBoardUrlPatch();
 
       return {
         localVersion,
