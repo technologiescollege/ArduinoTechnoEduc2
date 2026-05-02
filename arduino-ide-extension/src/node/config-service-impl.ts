@@ -158,6 +158,7 @@ export class ConfigServiceImpl
       delete this.config.messages;
       this.logger.info('The CLI config is valid.');
       if (config) {
+        await this.startDaemonWithPortableCliConfig();
         this.ready.resolve();
         this.logger.info('<<< Initialized the CLI configuration.');
         return;
@@ -166,8 +167,24 @@ export class ConfigServiceImpl
       this.logger.error('Failed to initialize the CLI configuration.', err);
       if (err instanceof InvalidConfigError) {
         this.config.messages = err.errors;
+        await this.startDaemonWithPortableCliConfig();
         this.ready.resolve();
       }
+    }
+  }
+
+  /**
+   * Starts the CLI daemon after `arduino-cli.yaml` is written so portable paths apply.
+   * (ArduinoDaemonImpl.onStart is intentionally a no-op to avoid racing config init.)
+   */
+  private async startDaemonWithPortableCliConfig(): Promise<void> {
+    try {
+      await this.daemon.start();
+    } catch (err) {
+      this.logger.error(
+        'Could not start Arduino CLI daemon after writing CLI configuration.',
+        err
+      );
     }
   }
 
