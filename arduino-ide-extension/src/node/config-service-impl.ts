@@ -214,7 +214,7 @@ export class ConfigServiceImpl
         )}`
       );
 
-      return mergedModel;
+      return this.applyPortableMode(mergedModel, cliConfigPath);
     } catch (error) {
       if (ErrnoException.isENOENT(error)) {
         if (initializeIfAbsent) {

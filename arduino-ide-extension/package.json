@@ -17,7 +17,7 @@
     "prebuild": "rimraf lib",
     "build": "tsc",
     "build:dev": "yarn build",
-    "postbuild": "ncp ./src/node/cli-protocol/ ./lib/node/cli-protocol/",
+    "postbuild": "ncp ./src/node/cli-protocol/ ./lib/node/cli-protocol/ && node ./scripts/copy-resources.js",
     "watch": "tsc -w",
     "test": "cross-env IDE2_TEST=true mocha \"./lib/test/**/*.test.js\"",
     "test:slow": "cross-env IDE2_TEST=true mocha \"./lib/test/**/*.slow-test.js\" --slow 5000"

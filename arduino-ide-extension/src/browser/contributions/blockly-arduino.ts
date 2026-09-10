@@ -76,6 +76,9 @@ export class BlocklyArduino
   @inject(BoardsServiceProvider)
   protected readonly boardsServiceProvider: BoardsServiceProvider;
 
+  @inject(MenuModelRegistry)
+  protected readonly menuModelRegistry: MenuModelRegistry;
+
   private blocklyProgress?: {
     progressId: string;
     report: (update: ProgressUpdate) => void;
@@ -84,6 +87,65 @@ export class BlocklyArduino
   override onStart(_app: FrontendApplication): MaybePromise<void> {
     this.blocklyArduinoService.setClient(this);
     this.registerBlocklyIdeBridgeHandler();
+  }
+
+  /**
+   * Menu labels are resolved when {@link registerMenus} runs; i18n can be applied slightly later.
+   * Refresh Blockly entries once the shell is ready so Electron/native menus match the selected language.
+   */
+  override onReady(): void {
+    this.refreshBlocklyMenuLabels();
+    this.menuManager.update();
+  }
+
+  private refreshBlocklyMenuLabels(): void {
+    this.menuModelRegistry.registerSubmenu(
+      ArduinoMenus.TOOLS__BLOCKLY_SUBMENU,
+      nls.localize('arduino/blocklyArduino/menu', 'Blockly@rduino'),
+      { order: '0' }
+    );
+    this.menuModelRegistry.unregisterMenuAction(
+      BlocklyArduino.Commands.UPDATE.id,
+      ArduinoMenus.TOOLS__BLOCKLY_MAIN_GROUP
+    );
+    this.menuModelRegistry.unregisterMenuAction(
+      BlocklyArduino.Commands.OPEN_LOCAL.id,
+      ArduinoMenus.TOOLS__BLOCKLY_MAIN_GROUP
+    );
+    this.menuModelRegistry.registerMenuAction(
+      ArduinoMenus.TOOLS__BLOCKLY_MAIN_GROUP,
+      {
+        commandId: BlocklyArduino.Commands.UPDATE.id,
+        label: nls.localize(
+          'arduino/blocklyArduino/update',
+          'Update Blockly@rduino'
+        ),
+        order: '0',
+      }
+    );
+    this.menuModelRegistry.registerMenuAction(
+      ArduinoMenus.TOOLS__BLOCKLY_MAIN_GROUP,
+      {
+        commandId: BlocklyArduino.Commands.OPEN_LOCAL.id,
+        label: nls.localize(
+          'arduino/blocklyArduino/openLocal',
+          'Open Blockly@rduino'
+        ),
+        order: '1',
+      }
+    );
+    this.menuModelRegistry.unregisterMenuAction(
+      BlocklyArduino.Commands.SHOW_PORTABLE_STATUS.id,
+      ArduinoMenus.HELP__MAIN_GROUP
+    );
+    this.menuModelRegistry.registerMenuAction(ArduinoMenus.HELP__MAIN_GROUP, {
+      commandId: BlocklyArduino.Commands.SHOW_PORTABLE_STATUS.id,
+      label: nls.localize(
+        'arduino/blocklyArduino/showPortableStatus',
+        'Show Portable Mode Status'
+      ),
+      order: '99',
+    });
   }
 
   /**

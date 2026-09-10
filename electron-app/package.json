@@ -22,8 +22,8 @@
     "arduino-ide-extension": "2.3.11"
   },
   "devDependencies": {
-    "@theia/cli": "1.57.0",
     "7zip-min": "^1.4.4",
+    "@theia/cli": "1.57.0",
     "chmodr": "^1.2.0",
     "compression-webpack-plugin": "^9.0.0",
     "copy-webpack-plugin": "^8.1.1",
@@ -39,6 +39,7 @@
     "rimraf": "^5.0.0",
     "semver": "^7.3.2",
     "temp": "^0.9.1",
+    "terser-webpack-plugin": "5",
     "yaml": "^1.10.2"
   },
   "scripts": {
@@ -48,7 +49,7 @@
     "prebuild:dev": "yarn prebuild",
     "build:dev": "theia build --config webpack.dev.js --mode development",
     "test": "mocha \"./test/**/*.test.js\"",
-    "start": "theia start --plugins=local-dir:../plugins",
+    "start": "ELECTRON_DISABLE_SANDBOX=1 theia start --plugins=local-dir:../plugins -- --no-sandbox",
     "watch": "theia build --config webpack.dev.js --mode development --watch",
     "prepackage": "rimraf dist",
     "package": "node ./scripts/package.js",

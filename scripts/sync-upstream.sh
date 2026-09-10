@@ -105,6 +105,17 @@ else
 fi
 
 echo ""
-echo ">>> Terminé."
-echo "    Conflits restants : résolvez, puis git add -A && git commit (merge) ou git rebase --continue (rebase)."
-echo "    Puis : git push origin $CURRENT"
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
+  || [[ -d "$(git rev-parse --git-path rebase-merge)" ]] \
+  || [[ -d "$(git rev-parse --git-path rebase-apply)" ]]; then
+  echo ">>> Fusion/rebase en cours — des conflits restent à résoudre."
+  echo "    Puis : git add -A && git commit  (merge)"
+  echo "       ou : git rebase --continue   (rebase)"
+  echo "    Ensuite : git push origin $CURRENT"
+elif [[ -n "$(git ls-files -u)" ]]; then
+  echo ">>> Des conflits non résolus sont encore présents."
+  echo "    Résolvez-les, puis git add -A && git commit"
+else
+  echo ">>> Terminé. Aucun conflit."
+  echo "    Pour publier : git push origin $CURRENT"
+fi
