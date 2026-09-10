@@ -1,0 +1,70 @@
+name: Publish release (Windows + update feed)
+
+# Builds a Windows release and publishes artifacts (ZIP + latest.yml) to the
+# GitHub Release so electron-updater can use:
+#   https://github.com/technologiescollege/ArduinoTechnoEduc2/releases/latest/download
+#
+# Trigger:
+#   - push a semver tag: 2.3.12
+#   - or Actions → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to GitHub Releases (always|never)"
+        required: true
+        default: "always"
+        type: choice
+        options:
+          - always
+          - never
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-win-x64:
+    runs-on: windows-latest
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18.17"
+          cache: "yarn"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          npx node-gyp install
+          yarn install --frozen-lockfile
+
+      - name: Build & package Windows x64 (release)
+        env:
+          IS_RELEASE: "true"
+          PUBLISH_UPDATE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish || 'always' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: yarn build:win:x64
+
+      - name: Upload dist as CI artifact (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-x64-dist
+          path: |
+            electron-app/dist/*.zip
+            electron-app/dist/*.yml
+            electron-app/dist/*.exe
+            electron-app/dist/*.msi
+          if-no-files-found: warn

@@ -1,7 +1,7 @@
 {
   "name": "arduino-ide",
   "version": "2.3.11",
-  "description": "Arduino IDE",
+  "description": "ArduinoTechno IDE",
   "repository": "https://github.com/arduino/arduino-ide.git",
   "author": "Arduino SA",
   "license": "AGPL-3.0-or-later",

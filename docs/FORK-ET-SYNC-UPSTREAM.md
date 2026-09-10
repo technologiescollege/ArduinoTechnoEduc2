@@ -131,3 +131,27 @@ Ces dossiers sont listés dans `.gitignore` (données locales, non versionnées)
 - Dépôt officiel : [github.com/arduino/arduino-ide](https://github.com/arduino/arduino-ide)
 - Scripts : `scripts/sync-upstream.sh`, `scripts/export-fork-patch.sh`
 - Commandes Yarn : `sync:upstream`, `export:fork-patch` (définies dans `package.json`)
+
+---
+
+## Mises à jour auto (fork ArduinoTechnoEduc2)
+
+L’IDE ne pointe **plus** vers `downloads.arduino.cc`, mais vers les **GitHub Releases** du fork :
+
+```text
+https://github.com/technologiescollege/ArduinoTechnoEduc2/releases/latest/download
+```
+
+Fichiers attendus sur la release « latest » : `latest.yml` (+ le ZIP/EXE Windows référencé).
+
+- Identité appli : `appId` = `fr.technologiescollege.ArduinoTechnoEduc2` (plus `cc.arduino.IDE2`)
+- Config utilisateur : dossier `.ArduinoTechnoEduc2`
+- Publication : workflow [publish-release.yml](../.github/workflows/publish-release.yml) (tag semver ou `workflow_dispatch`)
+
+```bash
+# Exemple : publier la 2.3.12
+git tag 2.3.12
+git push origin 2.3.12
+```
+
+Constantes : `scripts/fork-distribution.js`.

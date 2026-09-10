@@ -60,7 +60,7 @@
     "target": "electron",
     "frontend": {
       "config": {
-        "applicationName": "Arduino IDE",
+        "applicationName": "Arduino TechnoEduc",
         "defaultTheme": {
           "light": "arduino-theme",
           "dark": "arduino-theme-dark"
@@ -69,7 +69,7 @@
         "validatePreferencesSchema": false,
         "electron": {
           "showWindowEarly": true,
-          "uriScheme": "arduino-ide"
+          "uriScheme": "arduino-technoeduc"
         },
         "reloadOnReconnect": true,
         "preferences": {
@@ -87,13 +87,14 @@
           "editor.bracketPairColorization.enabled": false,
           "breadcrumbs.enabled": false,
           "workbench.tree.renderIndentGuides": "none",
-          "explorer.compactFolders": false
+          "explorer.compactFolders": false,
+          "arduino.ide.updateBaseUrl": "https://github.com/technologiescollege/ArduinoTechnoEduc2/releases/latest/download"
         }
       }
     },
     "backend": {
       "config": {
-        "configDirName": ".arduinoIDE",
+        "configDirName": ".ArduinoTechnoEduc2",
         "singleInstance": true
       }
     },
@@ -103,11 +104,11 @@
       }
     }
   },
-  "author": "Arduino SA",
-  "description": "Arduino IDE",
+  "author": "Technologies College",
+  "description": "Arduino TechnoEduc IDE",
   "build": {
-    "appId": "cc.arduino.IDE2",
-    "productName": "Arduino IDE",
+    "appId": "fr.technologiescollege.ArduinoTechnoEduc2",
+    "productName": "Arduino TechnoEduc",
     "asar": false,
     "detectUpdateChannel": false,
     "generateUpdatesFilesForAllChannels": true,
@@ -196,9 +197,10 @@
     "afterSign": "scripts/notarize.js",
     "publish": [
       {
-        "provider": "s3",
-        "bucket": "arduino-downloads-prod-beagle",
-        "path": "arduino-ide/nightly"
+        "provider": "github",
+        "owner": "technologiescollege",
+        "repo": "ArduinoTechnoEduc2",
+        "releaseType": "release"
       }
     ]
   },

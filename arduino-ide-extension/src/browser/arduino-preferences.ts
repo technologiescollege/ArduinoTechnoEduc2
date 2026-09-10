@@ -178,10 +178,11 @@ const properties: ArduinoPreferenceSchemaProperties = {
   },
   'arduino.ide.updateBaseUrl': {
     type: 'string',
-    default: 'https://downloads.arduino.cc/arduino-ide',
+    default:
+      'https://github.com/technologiescollege/ArduinoTechnoEduc2/releases/latest/download',
     description: nls.localize(
       'arduino/preferences/ide.updateBaseUrl',
-      "The base URL where to download updates from. Defaults to 'https://downloads.arduino.cc/arduino-ide'"
+      "The base URL where to download updates from. Defaults to the ArduinoTechnoEduc2 GitHub Releases feed."
     ),
   },
   'arduino.board.certificates': {

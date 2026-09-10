@@ -20,9 +20,10 @@ async function run() {
   const cliVersion = require('../../arduino-ide-extension/package.json')
     .arduino['arduino-cli'].version;
   const artifactName = await getArtifactName(version);
+  const publishMode = process.env.PUBLISH_UPDATE || 'never';
   const args = [
     '--publish',
-    'never',
+    publishMode,
     '-c.electronVersion',
     electronVersion,
     '-c.extraMetadata.version',

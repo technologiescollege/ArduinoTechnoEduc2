@@ -40,11 +40,17 @@ export class IDEUpdaterImpl implements IDEUpdater {
 
   async init(channel: UpdateChannel, baseUrl: string): Promise<void> {
     this.updater.autoDownload = false;
-    this.updater.channel = channel;
+    // electron-builder emits latest.yml / beta.yml. The upstream Arduino CI
+    // renamed those to stable.yml / nightly.yml; we keep builder defaults and
+    // map preference channels onto electron-updater channel names.
+    const isNightly = channel === UpdateChannel.Nightly;
+    this.updater.channel = isNightly ? 'beta' : 'latest';
+    const normalized = baseUrl.replace(/\/+$/, '');
+    const feedUrl = isNightly ? `${normalized}/nightly` : normalized;
     this.updater.setFeedURL({
       provider: 'generic',
-      url: `${baseUrl}/${channel === UpdateChannel.Nightly ? 'nightly' : ''}`,
-      channel,
+      url: feedUrl,
+      channel: this.updater.channel,
     });
   }
 
