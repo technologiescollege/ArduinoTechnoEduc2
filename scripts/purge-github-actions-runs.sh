@@ -44,14 +44,21 @@ page=1
 deleted=0
 while true; do
   if [[ "${USE_GH}" == "1" ]]; then
-    raw=$(gh api "$OWNER/$REPO/actions/runs?per_page=100&page=$page")
+    raw=$(gh api "repos/$OWNER/$REPO/actions/runs?per_page=100&page=$page") || {
+      echo "Échec API (auth ou droits). Vérifiez : gh auth status"
+      echo "Il faut le scope 'workflow' / permission actions:write sur le dépôt."
+      exit 1
+    }
   else
     raw=$(curl -sS \
       -H "Authorization: Bearer $TOKEN" \
       -H "Accept: application/vnd.github+json" \
       "https://api.github.com/repos/$OWNER/$REPO/actions/runs?per_page=100&page=$page")
   fi
-  ids=$(echo "$raw" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const j=JSON.parse(d); (j.workflow_runs||[]).forEach(r=>console.log(r.id));})")
+  ids=$(echo "$raw" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const j=JSON.parse(d); if(j.message){console.error(j.message); process.exit(2);} (j.workflow_runs||[]).forEach(r=>console.log(r.id));})" 2>/tmp/purge-gh-err) || {
+    cat /tmp/purge-gh-err
+    exit 1
+  }
   if [[ -z "$ids" ]]; then
     break
   fi
