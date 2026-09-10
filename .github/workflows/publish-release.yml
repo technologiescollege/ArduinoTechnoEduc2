@@ -27,7 +27,9 @@ permissions:
 
 jobs:
   publish-win-x64:
-    runs-on: windows-latest
+    # windows-latest shippe VS 18 (2025) que node-gyp@9 ne reconnaît pas
+    # → échec de compilation de node-pty / keytar / etc.
+    runs-on: windows-2022
     timeout-minutes: 180
 
     steps:
@@ -37,7 +39,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "20.20.2"
           cache: "yarn"
           package-manager-cache: false
 
@@ -50,8 +52,9 @@ jobs:
         env:
           # Requis pour @vscode/ripgrep (évite le rate-limit GitHub API)
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          npm_config_msvs_version: "2022"
         run: |
-          npx node-gyp install
+          npx node-gyp@10 install
           yarn install --frozen-lockfile
 
       - name: Build & package Windows x64
@@ -60,11 +63,12 @@ jobs:
           PUBLISH_UPDATE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish || 'always' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          npm_config_msvs_version: "2022"
         run: yarn build:win:x64
 
       - name: Upload dist backup artifact
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: win-x64-dist
           path: |
